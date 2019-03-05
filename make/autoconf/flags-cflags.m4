@@ -416,7 +416,8 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
   elif test "x$OPENJDK_TARGET_OS" = xaix; then
     CFLAGS_OS_DEF_JVM="-DAIX"
   elif test "x$OPENJDK_TARGET_OS" = xbsd; then
-    CFLAGS_OS_DEF_JDK="-D_ALLBSD_SOURCE"
+    CFLAGS_OS_DEF_JVM="-D_ALLBSD_SOURCE -D_BSDONLY_SOURCE -DPACKAGE_PATH='\"$PACKAGE_PATH\"'"
+    CFLAGS_OS_DEF_JDK="-D_ALLBSD_SOURCE -D_BSDONLY_SOURCE -D_REENTRANT"
   elif test "x$OPENJDK_TARGET_OS" = xwindows; then
     CFLAGS_OS_DEF_JVM="-D_WINDOWS -DWIN32 -D_JNI_IMPLEMENTATION_"
   fi
@@ -521,6 +522,16 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
     if test "x$OPENJDK_TARGET_OS" = xlinux; then
       TOOLCHAIN_CFLAGS_JDK="-pipe"
       TOOLCHAIN_CFLAGS_JDK_CONLY="-fno-strict-aliasing" # technically NOT for CXX
+    elif test "x$OPENJDK_TARGET_OS" = xbsd; then
+      TOOLCHAIN_CFLAGS_JDK="-pipe"
+      TOOLCHAIN_CFLAGS_JDK_CONLY="-fno-strict-aliasing" # technically NOT for CXX
+
+      CXXSTD_CXXFLAG="-std=gnu++98"
+      FLAGS_CXX_COMPILER_CHECK_ARGUMENTS(ARGUMENT: [$CXXSTD_CXXFLAG -Werror],
+    						   IF_FALSE: [CXXSTD_CXXFLAG=""])
+      TOOLCHAIN_CFLAGS_JDK_CXXONLY="$CXXSTD_CXXFLAG"
+      TOOLCHAIN_CFLAGS_JVM="$TOOLCHAIN_CFLAGS_JVM $CXXSTD_CXXFLAG"
+      ADLC_CXXFLAG="$CXXSTD_CXXFLAG"
     fi
   elif test "x$TOOLCHAIN_TYPE" = xsolstudio; then
     TOOLCHAIN_CFLAGS_JDK="-mt"
@@ -565,7 +576,7 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
     fi
   elif test "x$TOOLCHAIN_TYPE" = xclang; then
     WARNING_CFLAGS_JVM="$WARNING_CFLAGS_JVM -Wno-deprecated"
-    if test "x$OPENJDK_TARGET_OS" = xlinux; then
+    if test "x$OPENJDK_TARGET_OS" = xlinux || test "x$OPENJDK_TARGET_OS" = xbsd; then
       WARNING_CFLAGS_JVM="$WARNING_CFLAGS_JVM -Wno-sometimes-uninitialized"
       WARNING_CFLAGS_JDK="-Wall -Wextra -Wno-unused -Wno-unused-parameter -Wformat=2"
     fi
@@ -687,7 +698,7 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_CPU_DEP],
   if test "x$FLAGS_CPU_BITS" = x64; then
     # -D_LP64=1 is only set on linux and mac. Setting on windows causes diff in
     # unpack200.exe.
-    if test "x$FLAGS_OS" = xlinux || test "x$FLAGS_OS" = xmacosx; then
+    if test "x$FLAGS_OS" = xlinux || test "x$FLAGS_OS" = xmacosx || test "x$FLAGS_OS" = xbsd; then
       $1_DEFINES_CPU_JDK="${$1_DEFINES_CPU_JDK} -D_LP64=1"
     fi
     if test "x$FLAGS_OS" != xsolaris && test "x$FLAGS_OS" != xaix; then
