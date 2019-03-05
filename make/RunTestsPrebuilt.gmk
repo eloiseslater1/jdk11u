@@ -157,6 +157,8 @@ else
     OPENJDK_TARGET_OS := macosx
   else ifeq ($(UNAME_OS), SunOS)
     OPENJDK_TARGET_OS := solaris
+  else ifneq ($(findstring BSD,$(UNAME_OS),))
+    OPENJDK_TARGET_OS := bsd
   else
     OPENJDK_TARGET_OS := $(UNAME_OS)
   endif
@@ -217,6 +219,8 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
     NUM_CORES := $(shell $(CAT) /proc/cpuinfo  | $(GREP) -c processor)
 else ifeq ($(OPENJDK_TARGET_OS), macosx)
     NUM_CORES := $(shell /usr/sbin/sysctl -n hw.ncpu)
+else ifeq ($(OPENJDK_TARGET_OS), bsd)
+    NUM_CORES := $(shell /sbin/sysctl -n hw.ncpu)
 else ifeq ($(OPENJDK_TARGET_OS), solaris)
     NUM_CORES := $(shell LC_MESSAGES=C /usr/sbin/psrinfo -v | $(GREP) -c on-line)
 else ifeq ($(OPENJDK_TARGET_OS), windows)

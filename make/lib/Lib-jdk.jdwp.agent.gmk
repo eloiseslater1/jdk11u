@@ -40,6 +40,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBDT_SOCKET, \
     LIBS_linux := -lpthread, \
     LIBS_solaris := -lnsl -lsocket, \
     LIBS_windows := $(JDKLIB_LIBS) ws2_32.lib, \
+    LIBS_bsd := -pthread, \
 ))
 
 $(BUILD_LIBDT_SOCKET): $(call FindLib, java.base, java)
@@ -49,21 +50,30 @@ TARGETS += $(BUILD_LIBDT_SOCKET)
 
 ################################################################################
 
+ifeq ($(OPENJDK_TARGET_OS), bsd)
+  LIBJDWP_CFLAGS := $(ICONV_CFLAGS)
+endif
+
 # JDWP_LOGGING causes log messages to be compiled into the library.
 $(eval $(call SetupJdkLibrary, BUILD_LIBJDWP, \
     NAME := jdwp, \
     OPTIMIZATION := LOW, \
-    CFLAGS := $(CFLAGS_JDKLIB) -DJDWP_LOGGING, \
+    CFLAGS := $(CFLAGS_JDKLIB) -DJDWP_LOGGING \
+      $(LIBJDWP_CFLAGS), \
+    DISABLED_WARNINGS_clang := self-assign format-nonliteral \
+        sometimes-uninitialized, \
     EXTRA_HEADER_DIRS := \
       include \
       libjdwp/export, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
+    LDFLAGS_bsd := $(ICONV_LDFLAGS), \
     LIBS := $(JDKLIB_LIBS), \
     LIBS_linux := $(LIBDL), \
     LIBS_solaris := $(LIBDL), \
     LIBS_macosx := -liconv, \
     LIBS_aix := -liconv, \
+    LIBS_bsd := $(ICONV_LIBS), \
 ))
 
 $(BUILD_LIBJDWP): $(call FindLib, java.base, java)

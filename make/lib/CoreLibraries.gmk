@@ -60,6 +60,7 @@ ifneq ($(OPENJDK_TARGET_OS), macosx)
       CFLAGS_windows_debug := -DLOGGING, \
       CFLAGS_aix := -qfloat=nomaf, \
       DISABLED_WARNINGS_gcc := sign-compare misleading-indentation array-bounds, \
+      DISABLED_WARNINGS_clang := sign-compare, \
       DISABLED_WARNINGS_microsoft := 4146 4244 4018, \
       ARFLAGS := $(ARFLAGS), \
       OBJECT_DIR := $(SUPPORT_OUTPUTDIR)/native/$(MODULE)/libfdlibm, \
@@ -87,7 +88,7 @@ endif
 ##########################################################################################
 
 LIBVERIFY_OPTIMIZATION := HIGH
-ifneq ($(findstring $(OPENJDK_TARGET_OS), solaris linux), )
+ifneq ($(findstring $(OPENJDK_TARGET_OS), solaris linux bsd), )
   ifeq ($(COMPILE_WITH_DEBUG_SYMBOLS), true)
     LIBVERIFY_OPTIMIZATION := LOW
   endif
@@ -142,6 +143,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJAVA, \
     LIBS_windows := jvm.lib $(BUILD_LIBFDLIBM) $(WIN_VERIFY_LIB) \
         shell32.lib delayimp.lib \
         advapi32.lib version.lib, \
+    LIBS_bsd := $(BUILD_LIBFDLIBM), \
 ))
 
 TARGETS += $(BUILD_LIBJAVA)
@@ -189,7 +191,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJIMAGE, \
     CFLAGS_unix := -UDEBUG, \
     LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
-    LIBS_unix := -ljvm -ldl $(LIBCXX), \
+    LIBS_unix := -ljvm $(LIBDL) $(LIBCXX), \
     LIBS_macosx := -lc++, \
     LIBS_windows := jvm.lib, \
 ))
@@ -264,6 +266,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJLI, \
     DISABLED_WARNINGS_solstudio := \
         E_ASM_DISABLES_OPTIMIZATION \
         E_STATEMENT_NOT_REACHED, \
+    DISABLED_WARNINGS_clang := format-nonliteral, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_linux := $(call SET_SHARED_LIBRARY_ORIGIN,/..), \
@@ -274,6 +277,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJLI, \
     LIBS_aix := $(LIBDL),\
     LIBS_macosx := -framework Cocoa -framework Security -framework ApplicationServices, \
     LIBS_windows := advapi32.lib comctl32.lib user32.lib, \
+    LIBS_bsd := -pthread,\
 ))
 
 TARGETS += $(BUILD_LIBJLI)
@@ -327,7 +331,7 @@ else ifeq ($(OPENJDK_TARGET_OS), macosx)
     TARGETS += $(SUPPORT_OUTPUTDIR)/native/$(MODULE)/libjli_static.a
   endif
 
-else ifeq ($(OPENJDK_TARGET_OS), aix)
+else ifneq ($(findstring $(OPENJDK_TARGET_OS), aix bsd), )
   # AIX also requires a static libjli because the compiler doesn't support '-rpath'
   $(eval $(call SetupNativeCompilation, BUILD_LIBJLI_STATIC, \
       NAME := jli_static, \
@@ -339,6 +343,7 @@ else ifeq ($(OPENJDK_TARGET_OS), aix)
       OPTIMIZATION := HIGH, \
       CFLAGS := $(STATIC_LIBRARY_FLAGS) $(LIBJLI_CFLAGS_JDKLIB) $(LIBJLI_CFLAGS) \
           $(addprefix -I, $(LIBJLI_SRC_DIRS)), \
+      DISABLED_WARNINGS_clang := format-nonliteral, \
       ARFLAGS := $(ARFLAGS), \
       OBJECT_DIR := $(SUPPORT_OUTPUTDIR)/native/$(MODULE)/libjli_static))
 
