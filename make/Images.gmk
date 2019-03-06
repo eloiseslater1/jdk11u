@@ -170,6 +170,10 @@ ifneq ($(OPENJDK_TARGET_OS), windows)
       MAN_SRC_DIR = $(MAN_SRC_BASEDIR)/bsd/doc
       MAN1_SUBDIR = man
     endif
+    ifeq ($(OPENJDK_TARGET_OS), bsd)
+      MAN_SRC_DIR = $(MAN_SRC_BASEDIR)/bsd/doc
+      MAN1_SUBDIR = man
+    endif
 
     $(JRE_IMAGE_DIR)/man/man1/%: $(MAN_SRC_DIR)/$(MAN1_SUBDIR)/%
 	$(call LogInfo, Copying $(patsubst $(OUTPUTDIR)/%,%,$@))
@@ -227,6 +231,11 @@ ifneq ($(OPENJDK_TARGET_OS), windows)
       JDK_MAN_PAGE_LIST = $(addprefix $(JDK_IMAGE_DIR)/man/man1/, $(JDK_MAN_PAGES)) \
           $(addprefix $(JDK_IMAGE_DIR)/man/ja_JP.UTF-8/man1/, $(JDK_MAN_PAGES)) \
           $(JDK_IMAGE_DIR)/man/ja
+    endif
+
+    ifeq ($(OPENJDK_TARGET_OS), bsd)
+      JRE_MAN_PAGE_LIST = $(addprefix $(JRE_IMAGE_DIR)/man/man1/, $(JRE_MAN_PAGES))
+      JDK_MAN_PAGE_LIST = $(addprefix $(JDK_IMAGE_DIR)/man/man1/, $(JDK_MAN_PAGES))
     endif
 
     JRE_TARGETS += $(JRE_MAN_PAGE_LIST)

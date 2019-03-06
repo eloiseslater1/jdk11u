@@ -27,6 +27,8 @@ include JdkNativeCompilation.gmk
 
 ifeq ($(OPENJDK_TARGET_OS), macosx)
   ORIGIN_ARG := $(call SET_EXECUTABLE_ORIGIN)
+else ifeq ($(OPENJDK_TARGET_OS), bsd)
+  ORIGIN_ARG := $(call SET_EXECUTABLE_ORIGIN,/../lib)
 else
   ifeq ($(OPENJDK_TARGET_OS), windows)
   endif
@@ -156,7 +158,7 @@ define SetupBuildLauncherBody
         -framework ApplicationServices
   endif
 
-  ifeq ($(OPENJDK_TARGET_OS), aix)
+  ifneq (,$(filter $(OPENJDK_TARGET_OS), aix bsd))
     $1_LDFLAGS += -L$(SUPPORT_OUTPUTDIR)/native/java.base
     $1_LIBS += -ljli_static
   endif
@@ -186,6 +188,7 @@ define SetupBuildLauncherBody
       CFLAGS_linux := -fPIC, \
       CFLAGS_solaris := -KPIC -DHAVE_GETHRTIME, \
       CFLAGS_windows := $$($1_CFLAGS_windows), \
+      CFLAGS_bsd := -fPIC, \
       LDFLAGS := $$(LDFLAGS_JDKEXE) \
           $$(ORIGIN_ARG) \
           $$($1_LDFLAGS), \
@@ -196,6 +199,7 @@ define SetupBuildLauncherBody
       LIBS := $(JDKEXE_LIBS) $$($1_LIBS), \
       LIBS_unix := $$($1_LIBS_unix), \
       LIBS_linux := -lpthread -ljli $(LIBDL), \
+      LIBS_bsd := -pthread, \
       LIBS_solaris := -ljli -lthread $(LIBDL), \
       LIBS_windows := $$($1_WINDOWS_JLI_LIB) \
           $(SUPPORT_OUTPUTDIR)/native/java.base/libjava/java.lib advapi32.lib \
@@ -211,7 +215,7 @@ define SetupBuildLauncherBody
   $1 += $$(BUILD_LAUNCHER_$1)
   TARGETS += $$($1)
 
-  ifneq (,$(filter $(OPENJDK_TARGET_OS), macosx aix))
+  ifneq (,$(filter $(OPENJDK_TARGET_OS), macosx aix bsd))
     $$(BUILD_LAUNCHER_$1): $(SUPPORT_OUTPUTDIR)/native/java.base/libjli_static.a
   endif
 
