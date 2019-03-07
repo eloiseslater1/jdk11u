@@ -27,7 +27,7 @@
 
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <sys/syslimits.h>
+#include <sys/limits.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <errno.h>
