@@ -132,6 +132,10 @@
   #define MAP_ANONYMOUS MAP_ANON
 #endif
 
+#ifndef MAP_NORESERVE
+  #define MAP_NORESERVE 0
+#endif
+
 #define MAX_PATH    (2 * K)
 
 // for timer info max values which include all bits
@@ -1592,6 +1596,7 @@ int os::get_loaded_modules_info(os::LoadedModulesCallbackFunc callback, void *pa
   }
 
   dlclose(handle);
+  return 0;
 #elif defined(__APPLE__)
   for (uint32_t i = 1; i < _dyld_image_count(); i++) {
     // Value for top_address is returned as 0 since we don't have any information about module size
@@ -1614,7 +1619,7 @@ void os::get_summary_os_info(char* buf, size_t buflen) {
   if (sysctl(mib_kern, 2, os, &size, NULL, 0) < 0) {
 #ifdef __APPLE__
       strncpy(os, "Darwin", sizeof(os));
-#elif __OpenBSD__
+#elif defined(__OpenBSD__)
       strncpy(os, "OpenBSD", sizeof(os));
 #else
       strncpy(os, "BSD", sizeof(os));
@@ -1719,9 +1724,9 @@ void os::print_memory_info(outputStream* st) {
   int total, used;
   get_swap_info(&total, &used);
   st->print(", swap " UINT64_FORMAT "k",
-            (total * os::vm_page_size()) >> 10);
+            (((uint64_t) total) * ((uint64_t) os::vm_page_size())) >> 10);
   st->print("(" UINT64_FORMAT "k free)",
-            ((total - used) * os::vm_page_size()) >> 10);
+            (((uint64_t) (total - used)) * ((uint64_t) os::vm_page_size())) >> 10);
 #endif
   st->cr();
 }
