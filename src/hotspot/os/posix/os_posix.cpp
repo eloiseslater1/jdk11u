@@ -59,6 +59,10 @@
   #define MAP_ANONYMOUS MAP_ANON
 #endif
 
+#ifndef MAP_NORESERVE
+  #define MAP_NORESERVE 0
+#endif
+
 #define check_with_errno(check_type, cond, msg)                             \
   do {                                                                      \
     int err = errno;                                                        \
