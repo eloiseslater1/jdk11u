@@ -240,7 +240,7 @@ inline int wcslen(const jchar* x) { return wcslen((const wchar_t*)x); }
 
 // Formatting.
 #ifdef _LP64
-# ifdef __OpenBSD__
+# if defined(__APPLE__) || defined(__OpenBSD__)
 # define FORMAT64_MODIFIER "ll"
 # else
 # define FORMAT64_MODIFIER "l"
