@@ -415,6 +415,8 @@ Java_com_sun_management_internal_OperatingSystemImpl_getTotalPhysicalMemorySize0
     mib[0] = CTL_HW;
 #if defined (HW_MEMSIZE) // Apple
     mib[1] = HW_MEMSIZE;
+#elif defined(HW_PHYSMEM64) // OpenBSD & NetBSD
+    mib[1] = HW_PHYSMEM64;
 #elif defined(HW_PHYSMEM) // Most of BSD
     mib[1] = HW_PHYSMEM;
 #else
