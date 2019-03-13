@@ -62,8 +62,8 @@
 extern sigjmp_buf* get_jmp_buf_for_continuation();
 
 address os::current_stack_pointer() {
-  address dummy = (address) &dummy;
-  return dummy;
+  // return the address of the current function
+  return (address)__builtin_frame_address(0);
 }
 
 frame os::get_sender_for_C_frame(frame* fr) {
@@ -376,42 +376,42 @@ extern "C" {
     return 1;
   }
 
-  void _Copy_conjoint_jshorts_atomic(jshort* from, jshort* to, size_t count) {
+  void _Copy_conjoint_jshorts_atomic(const jshort* from, jshort* to, size_t count) {
     if (from > to) {
-      jshort *end = from + count;
+      const jshort *end = from + count;
       while (from < end)
         *(to++) = *(from++);
     }
     else if (from < to) {
-      jshort *end = from;
+      const jshort *end = from;
       from += count - 1;
       to   += count - 1;
       while (from >= end)
         *(to--) = *(from--);
     }
   }
-  void _Copy_conjoint_jints_atomic(jint* from, jint* to, size_t count) {
+  void _Copy_conjoint_jints_atomic(const jint* from, jint* to, size_t count) {
     if (from > to) {
-      jint *end = from + count;
+      const jint *end = from + count;
       while (from < end)
         *(to++) = *(from++);
     }
     else if (from < to) {
-      jint *end = from;
+      const jint *end = from;
       from += count - 1;
       to   += count - 1;
       while (from >= end)
         *(to--) = *(from--);
     }
   }
-  void _Copy_conjoint_jlongs_atomic(jlong* from, jlong* to, size_t count) {
+  void _Copy_conjoint_jlongs_atomic(const jlong* from, jlong* to, size_t count) {
     if (from > to) {
-      jlong *end = from + count;
+      const jlong *end = from + count;
       while (from < end)
         os::atomic_copy64(from++, to++);
     }
     else if (from < to) {
-      jlong *end = from;
+      const jlong *end = from;
       from += count - 1;
       to   += count - 1;
       while (from >= end)
@@ -419,42 +419,27 @@ extern "C" {
     }
   }
 
-  void _Copy_arrayof_conjoint_bytes(HeapWord* from,
+  void _Copy_arrayof_conjoint_bytes(const HeapWord* from,
                                     HeapWord* to,
                                     size_t    count) {
     memmove(to, from, count);
   }
-  void _Copy_arrayof_conjoint_jshorts(HeapWord* from,
+  void _Copy_arrayof_conjoint_jshorts(const HeapWord* from,
                                       HeapWord* to,
                                       size_t    count) {
     memmove(to, from, count * 2);
   }
-  void _Copy_arrayof_conjoint_jints(HeapWord* from,
+  void _Copy_arrayof_conjoint_jints(const HeapWord* from,
                                     HeapWord* to,
                                     size_t    count) {
     memmove(to, from, count * 4);
   }
-  void _Copy_arrayof_conjoint_jlongs(HeapWord* from,
+  void _Copy_arrayof_conjoint_jlongs(const HeapWord* from,
                                      HeapWord* to,
                                      size_t    count) {
     memmove(to, from, count * 8);
   }
 };
-
-/////////////////////////////////////////////////////////////////////////////
-// Implementations of atomic operations not supported by processors.
-//  -- http://gcc.gnu.org/onlinedocs/gcc-4.2.1/gcc/Atomic-Builtins.html
-
-#ifndef _LP64
-extern "C" {
-  long long unsigned int __sync_val_compare_and_swap_8(
-    volatile void *ptr,
-    long long unsigned int oldval,
-    long long unsigned int newval) {
-    ShouldNotCallThis();
-  }
-};
-#endif // !_LP64
 
 #ifndef PRODUCT
 void os::verify_stack_alignment() {
