@@ -37,7 +37,26 @@
 #include <unistd.h>
 #include <string.h>
 
+#include <sys/types.h>
 #include <sys/sysctl.h>
+
+#ifdef __FreeBSD__
+#include <sys/user.h> // For kinfo_proc
+#endif
+
+#if defined(__OpenBSD__)
+#define KI_PID         p_pid
+#define KI_PPID        p_ppid
+#define KI_UID         p_uid
+#define KI_START_SEC   p_ustart_sec
+#define KI_START_USEC  p_ustart_usec
+#elif defined(__FreeBSD__)
+#define KI_PID         ki_pid
+#define KI_PPID        ki_ppid
+#define KI_UID         ki_uid
+#define KI_START_SEC   ki_start.tv_sec
+#define KI_START_USEC  ki_start.tv_usec
+#endif
 
 /**
  * Implementation of native ProcessHandleImpl functions for BSD's.
@@ -58,7 +77,6 @@ void os_initNative(JNIEnv *env, jclass clazz) {}
  */
 jint os_getChildren(JNIEnv *env, jlong jpid, jlongArray jarray,
                     jlongArray jparentArray, jlongArray jstimesArray) {
-#ifdef __APPLE__
     jlong* pids = NULL;
     jlong* ppids = NULL;
     jlong* stimes = NULL;
@@ -137,18 +155,18 @@ jint os_getChildren(JNIEnv *env, jlong jpid, jlongArray jarray,
 
         // Process each entry in the buffer
         for (i = nentries; --i >= 0; ++kp) {
-            if (pid == 0 || kp->kp_eproc.e_ppid == pid) {
+            if (pid == 0 || kp->KI_PPID == pid) {
                 if (count < arraySize) {
                     // Only store if it fits
-                    pids[count] = (jlong) kp->kp_proc.p_pid;
+                    pids[count] = (jlong) kp->KI_PID;
                     if (ppids != NULL) {
                         // Store the parentPid
-                        ppids[count] = (jlong) kp->kp_eproc.e_ppid;
+                        ppids[count] = (jlong) kp->KI_PPID;
                     }
                     if (stimes != NULL) {
                         // Store the process start time
-                        jlong startTime = kp->kp_proc.p_starttime.tv_sec * 1000 +
-                                          kp->kp_proc.p_starttime.tv_usec / 1000;
+                        jlong startTime = kp->KI_START_SEC * 1000 +
+                                          kp->KI_START_USEC / 1000;
                         stimes[count] = startTime;
                     }
                 }
@@ -170,11 +188,6 @@ jint os_getChildren(JNIEnv *env, jlong jpid, jlongArray jarray,
     free(buffer);
     // If more pids than array had size for; count will be greater than array size
     return count;
-#else
-    JNU_ThrowByName(env, "java/lang/UnsupportedOperationException",
-            "unsupported option");
-    return -1;
-#endif
 }
 
 /**
@@ -185,7 +198,6 @@ jint os_getChildren(JNIEnv *env, jlong jpid, jlongArray jarray,
  */
 pid_t os_getParentPidAndTimings(JNIEnv *env, pid_t jpid,
                                 jlong *totalTime, jlong *startTime) {
-#ifdef __APPLE__
     const pid_t pid = (pid_t) jpid;
     pid_t ppid = -1;
     struct kinfo_proc kp;
@@ -199,14 +211,19 @@ pid_t os_getParentPidAndTimings(JNIEnv *env, pid_t jpid,
             "java/lang/RuntimeException", "sysctl failed");
         return -1;
     }
-    if (bufSize > 0 && kp.kp_proc.p_pid == pid) {
-        *startTime = (jlong) (kp.kp_proc.p_starttime.tv_sec * 1000 +
-                              kp.kp_proc.p_starttime.tv_usec / 1000);
-        ppid = kp.kp_eproc.e_ppid;
+    if (bufSize > 0 && kp.KI_PID == pid) {
+        *startTime = (jlong) (kp.KI_START_SEC * 1000 +
+                              kp.KI_START_USEC / 1000);
+        ppid = kp.KI_PPID;
     }
 
     // Get cputime if for current process
     if (pid == getpid()) {
+#ifdef __OpenBSD__
+        jlong microsecs = kp.p_uutime_sec * 1000 * 1000 + kp.p_uutime_usec +
+            kp.p_ustime_sec * 1000 * 1000 + kp.p_ustime_usec;
+        *totalTime = microsecs * 1000;
+#else
         struct rusage usage;
         if (getrusage(RUSAGE_SELF, &usage) == 0) {
           jlong microsecs =
@@ -214,17 +231,12 @@ pid_t os_getParentPidAndTimings(JNIEnv *env, pid_t jpid,
               usage.ru_stime.tv_sec * 1000 * 1000 + usage.ru_stime.tv_usec;
           *totalTime = microsecs * 1000;
         }
+#endif
     }
 
     return ppid;
-#else
-    JNU_ThrowByName(env, "java/lang/UnsupportedOperationException",
-            "unsupported option");
-    return -1;
-#endif
 }
 
-#ifdef __APPLE__
 /**
  * Return the uid of a process or -1 on error
  */
@@ -236,21 +248,19 @@ static uid_t getUID(pid_t pid) {
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, pid};
 
     if (sysctl(mib, 4, &kp, &bufSize, NULL, 0) == 0) {
-        if (bufSize > 0 && kp.kp_proc.p_pid == pid) {
-            return kp.kp_eproc.e_ucred.cr_uid;
+        if (bufSize > 0 && kp.KI_PID == pid) {
+            return kp.KI_UID;
         }
     }
     return (uid_t)-1;
 }
-#endif
 
 /**
  * Retrieve the command and arguments for the process and store them
  * into the Info object.
  */
 void os_getCmdlineAndUserInfo(JNIEnv *env, jobject jinfo, pid_t pid) {
-#ifdef __APPLE__
-    int mib[3], maxargs, nargs, i;
+    int mib[4], maxargs, nargs, i;
     size_t size;
     char *args, *cp, *sp, *np;
 
@@ -279,12 +289,22 @@ void os_getCmdlineAndUserInfo(JNIEnv *env, jobject jinfo, pid_t pid) {
     do {            // a block to break out of on error
         char *argsEnd;
         jstring cmdexe = NULL;
+        unsigned namelen;
 
         mib[0] = CTL_KERN;
-        mib[1] = KERN_PROCARGS2;
+#if defined(__OpenBSD__)
+        mib[1] = KERN_PROC_ARGS;
         mib[2] = pid;
+        namelen = 3;
+#elif defined(__FreeBSD__)
+        mib[0] = CTL_KERN;
+        mib[1] = KERN_PROC;
+        mib[2] = KERN_PROC_ARGS;
+        mib[3] = pid;
+        namelen = 4;
+#endif
         size = (size_t) maxargs;
-        if (sysctl(mib, 3, args, &size, NULL, 0) == -1) {
+        if (sysctl(mib, namelen, args, &size, NULL, 0) == -1) {
             if (errno != EINVAL) {
                 JNU_ThrowByNameWithLastError(env,
                     "java/lang/RuntimeException", "sysctl failed");
@@ -312,9 +332,5 @@ void os_getCmdlineAndUserInfo(JNIEnv *env, jobject jinfo, pid_t pid) {
     } while (0);
     // Free the arg buffer
     free(args);
-#else
-    JNU_ThrowByName(env, "java/lang/UnsupportedOperationException",
-            "unsupported option");
-#endif
 }
 
