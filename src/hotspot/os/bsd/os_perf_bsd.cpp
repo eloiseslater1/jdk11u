@@ -26,7 +26,7 @@
 #include "memory/resourceArea.hpp"
 #include "runtime/os.hpp"
 #include "runtime/os_perf.hpp"
-//#include "vm_version_ext_x86.hpp"
+#include "vm_version_ext_x86.hpp"
 
 #ifdef __APPLE__
   #import <libproc.h>
@@ -369,8 +369,6 @@ CPUInformationInterface::CPUInformationInterface() {
 }
 
 bool CPUInformationInterface::initialize() {
-  return false;
-#if 0
   _cpu_info = new CPUInformation();
 
   if (NULL == _cpu_info) {
@@ -383,7 +381,6 @@ bool CPUInformationInterface::initialize() {
   _cpu_info->set_cpu_description(VM_Version_Ext::cpu_description());
 
   return true;
-#endif
 }
 
 CPUInformationInterface::~CPUInformationInterface() {
