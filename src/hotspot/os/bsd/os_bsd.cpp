@@ -1429,7 +1429,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
 
   #ifndef EM_AARCH64
     #define EM_AARCH64     183              /* ARM AARCH64 */
-  #endif 
+  #endif
 
   static const arch_t arch_array[]={
     {EM_386,         EM_386,     ELFCLASS32, ELFDATA2LSB, (char*)"IA 32"},
@@ -1448,7 +1448,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
     {EM_MIPS_RS3_LE, EM_MIPS_RS3_LE, ELFCLASS32, ELFDATA2LSB, (char*)"MIPSel"},
     {EM_MIPS,        EM_MIPS,    ELFCLASS32, ELFDATA2MSB, (char*)"MIPS"},
     {EM_PARISC,      EM_PARISC,  ELFCLASS32, ELFDATA2MSB, (char*)"PARISC"},
-    {EM_68K,         EM_68K,     ELFCLASS32, ELFDATA2MSB, (char*)"M68k"},
+    {EM_68K,         EM_68K,     ELFCLASS32, ELFDATA2MSB, (char*)"M68k"}
   };
 
   #if  (defined IA32)
