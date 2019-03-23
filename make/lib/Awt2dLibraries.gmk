@@ -364,7 +364,7 @@ endif
 ################################################################################
 
 # The fast floor code loses precision.
-LCMS_CFLAGS=-DCMS_DONT_USE_FAST_FLOOR
+LCMS_CFLAGS+=-DCMS_DONT_USE_FAST_FLOOR
 
 LCMS_CFLAGS_JDKLIB := $(filter-out -xc99=%none, $(CFLAGS_JDKLIB))
 
