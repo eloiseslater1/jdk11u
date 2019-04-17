@@ -67,7 +67,7 @@ void check(jvmtiEnv *jvmti_env, jthread thr, jmethodID mid, jlocation loc, jint 
     char *sigClass, *name, *sig, *generic;
     jvmtiLocalVariableEntry *table = NULL;
     jint entryCount = 0;
-    jint argValue;
+    jint argValue = 0;
     jint j;
 
     err = (*jvmti_env)->GetMethodDeclaringClass(jvmti_env, mid, &cls);

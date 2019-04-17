@@ -91,9 +91,9 @@ MethodExit(
 
     if (watch_jvmti_events) {
         jvmtiThreadInfo thr_info;
-        char *class_signature;
-        char *entry_name;
-        char *entry_sig;
+        char *class_signature = NULL;
+        char *entry_name = NULL;
+        char *entry_sig = NULL;
         jclass klass;
 
         int failure = 1;
