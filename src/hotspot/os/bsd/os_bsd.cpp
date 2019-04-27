@@ -121,6 +121,10 @@
 #include <lwp.h>
 #endif
 
+#ifdef __OpenBSD__
+# include <pthread_np.h>
+#endif
+
 #ifdef __APPLE__
   #include <mach/mach.h> // semaphore_* API
   #include <mach-o/dyld.h>
