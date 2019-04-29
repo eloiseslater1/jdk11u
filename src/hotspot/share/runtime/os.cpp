@@ -1491,7 +1491,6 @@ static const char* errno_to_string (int e, bool short_text) {
     X(ENOENT, "No such file or directory") \
     X(ENOEXEC, "Executable file format error") \
     X(ENOLCK, "No locks available") \
-    X(ENOLINK, "Reserved") \
     X(ENOMEM, "Not enough space") \
     X(ENOMSG, "No message of the desired type") \
     X(ENOPROTOOPT, "Protocol not available") \
@@ -1542,6 +1541,9 @@ static const char* errno_to_string (int e, bool short_text) {
     #endif
     #ifdef ENODATA
     DEFINE_ENTRY(ENODATA, "No message is available on the STREAM head read queue")
+    #endif
+    #ifdef ENOLINK
+    DEFINE_ENTRY(ENOLINK, "Reserved")
     #endif
     #ifdef ENOSR
     DEFINE_ENTRY(ENOSR, "No STREAM resources")
