@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2015, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -78,19 +78,10 @@ static jlong page_size = 0;
 
 #endif /* _ALLBSD_SOURCE */
 
-static struct dirent* read_dir(DIR* dirp, struct dirent* entry) {
-#ifdef __solaris__
-    struct dirent* dbuf = readdir(dirp);
-    return dbuf;
-#else /* __linux__ || _ALLBSD_SOURCE */
-    struct dirent* p;
-    if (readdir_r(dirp, entry, &p) == 0) {
-        return p;
-    } else {
-        return NULL;
-    }
+#if defined(_ALLBSD_SOURCE)
+  #define dirent64 dirent
+  #define readdir64 readdir
 #endif
-}
 
 // true = get available swap in bytes
 // false = get total swap in bytes
@@ -494,8 +485,7 @@ Java_com_sun_management_internal_OperatingSystemImpl_getOpenFileDescriptorCount0
     return getdtablecount();
 #else /* solaris/linux */
     DIR *dirp;
-    struct dirent dbuf;
-    struct dirent* dentp;
+    struct dirent64* dentp;
     jlong fds = 0;
 
 #if defined(_AIX)
@@ -517,7 +507,7 @@ Java_com_sun_management_internal_OperatingSystemImpl_getOpenFileDescriptorCount0
 
     // iterate through directory entries, skipping '.' and '..'
     // each entry represents an open file descriptor.
-    while ((dentp = read_dir(dirp, &dbuf)) != NULL) {
+    while ((dentp = readdir64(dirp)) != NULL) {
         if (isdigit(dentp->d_name[0])) {
             fds++;
         }

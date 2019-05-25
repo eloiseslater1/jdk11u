@@ -90,7 +90,7 @@ endif
 
 ################################################################################
 
-ifneq ($(findstring $(OPENJDK_TARGET_OS), macosx solaris aix bsd), )
+ifneq ($(findstring $(OPENJDK_TARGET_OS), macosx solaris aix linux bsd), )
   $(eval $(call SetupJdkExecutable, BUILD_JSPAWNHELPER, \
       NAME := jspawnhelper, \
       SRC := $(TOPDIR)/src/$(MODULE)/unix/native/jspawnhelper, \
