@@ -62,13 +62,35 @@ isAsciiDigit(char c)
   return c >= '0' && c <= '9';
 }
 
+#if defined(_BSDONLY_SOURCE)
+/*
+ * Quoting POSIX: "If a multi-threaded process calls fork(), the new
+ * process shall contain a replica of the calling thread and its entire
+ * address space, possibly including the states of mutexes and other
+ * resources. Consequently, to avoid errors, the child process may only
+ * execute async-signal-safe operations until such time as one of the exec
+ * functions is called."
+ *
+ * opendir and readir are not async-signal-safe and can deadlock when
+ * called after fork or vfork (and before exec) so use closefrom syscall
+ * which is safe to call after forking.
+ */
+int
+closeDescriptors(void)
+{
+    int err;
+    RESTARTABLE(closefrom(FAIL_FILENO + 1), err);
+    return err;
+}
+#else
+
 #if defined(_AIX)
   /* AIX does not understand '/proc/self' - it requires the real process ID */
   #define FD_DIR aix_fd_dir
   #define DIR DIR64
   #define opendir opendir64
   #define closedir closedir64
-#elif defined(_ALLBSD_SOURCE)
+#elif defined(MACOSX)
   #define FD_DIR "/dev/fd"
   #define dirent64 dirent
   #define readdir64 readdir
@@ -116,6 +138,7 @@ closeDescriptors(void)
 
     return 1;
 }
+#endif /* _BSDONLY_SOURCE */
 
 int
 moveDescriptor(int fd_from, int fd_to)
