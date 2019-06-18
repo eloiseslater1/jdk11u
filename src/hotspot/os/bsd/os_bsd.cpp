@@ -2341,12 +2341,13 @@ static size_t _large_page_size =
 
 void os::large_page_init() {
 #if defined(__FreeBSD__)
+	if (!UseLargePages) return;
 	unsigned int super_pg = 0;
 	size_t length = sizeof(super_pg);
 	// Boot time only knob
 	if (sysctlbyname("vm.pmap.pg_ps_enabled", &super_pg, &length, NULL, 0) == -1 ||
             super_pg < 1) {
-		_large_page_size = 0;
+		UseLargePages = false;
 	}
 #endif
 }
@@ -2459,15 +2460,12 @@ size_t os::large_page_size() {
   return _large_page_size;
 }
 
-// HugeTLBFS allows application to commit large page memory on demand;
-// with SysV SHM the entire memory region must be allocated as shared
-// memory.
 bool os::can_commit_large_page_memory() {
-  return UseHugeTLBFS;
+  return false;
 }
 
 bool os::can_execute_large_page_memory() {
-  return UseHugeTLBFS;
+  return true;
 }
 
 char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr, int file_desc) {
