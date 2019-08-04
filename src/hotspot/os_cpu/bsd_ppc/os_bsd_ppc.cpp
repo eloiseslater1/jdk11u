@@ -133,7 +133,7 @@ intptr_t* os::Bsd::ucontext_get_fp(const ucontext_t * uc) {
 }
 
 static unsigned long ucontext_get_trap(const ucontext_t * uc) {
-  return uc->uc_mcontext.regs->trap;
+  return uc->uc_mcontext.mc_exc;
 }
 
 ExtendedPC os::fetch_frame_from_context(const void* ucVoid,
