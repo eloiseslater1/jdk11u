@@ -300,7 +300,7 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     }
 #endif
 
-#ifdef __OpenBSD__
+#ifdef _BSDONLY_SOURCE
     PUTPROP(props, "java.net.preferIPv4Stack", sprops->java_net_preferIPv4Stack);
 #endif
 
