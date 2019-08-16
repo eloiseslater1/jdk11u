@@ -53,9 +53,6 @@
 #include "utilities/debug.hpp"
 #include "utilities/events.hpp"
 #include "utilities/vmError.hpp"
-#ifdef BUILTIN_SIM
-#include "../../../../../../simulator/simulator.hpp"
-#endif
 
 // put OS-includes here
 # include <sys/types.h>
@@ -77,14 +74,8 @@
 # include <poll.h>
 # include <ucontext.h>
 
-#ifdef BUILTIN_SIM
-#define REG_SP REG_RSP
-#define REG_PC REG_RIP
-#define REG_FP REG_RBP
-#else
 #define REG_FP 29
 #define REG_LR 30
-#endif
 
 NOINLINE address os::current_stack_pointer() {
   return (address)__builtin_frame_address(0);
@@ -99,35 +90,19 @@ char* os::non_memory_address_word() {
 }
 
 address os::Bsd::ucontext_get_pc(const ucontext_t * uc) {
-#ifdef BUILTIN_SIM
-  return (address)uc->uc_mcontext.gregs[REG_PC];
-#else
   return (address)uc->uc_mcontext.mc_gpregs.gp_elr;
-#endif
 }
 
 void os::Bsd::ucontext_set_pc(ucontext_t * uc, address pc) {
-#ifdef BUILTIN_SIM
-  uc->uc_mcontext.gregs[REG_PC] = (intptr_t)pc;
-#else
   uc->uc_mcontext.mc_gpregs.gp_elr = (intptr_t)pc;
-#endif
 }
 
 intptr_t* os::Bsd::ucontext_get_sp(const ucontext_t * uc) {
-#ifdef BUILTIN_SIM
-  return (intptr_t*)uc->uc_mcontext.gregs[REG_SP];
-#else
   return (intptr_t*)uc->uc_mcontext.mc_gpregs.gp_sp;
-#endif
 }
 
 intptr_t* os::Bsd::ucontext_get_fp(const ucontext_t * uc) {
-#ifdef BUILTIN_SIM
-  return (intptr_t*)uc->uc_mcontext.gregs[REG_FP];
-#else
   return (intptr_t*)uc->uc_mcontext.mc_gpregs.gp_x[REG_FP];
-#endif
 }
 
 // For Forte Analyzer AsyncGetCallTrace profiling support - thread
@@ -215,11 +190,7 @@ bool os::Bsd::get_frame_at_stack_banging_point(JavaThread* thread, ucontext_t* u
 // By default, gcc always saves frame pointer rfp on this stack. This
 // may get turned off by -fomit-frame-pointer.
 frame os::get_sender_for_C_frame(frame* fr) {
-#ifdef BUILTIN_SIM
-  return frame(fr->sender_sp(), fr->link(), fr->sender_pc());
-#else
   return frame(fr->link(), fr->link(), fr->sender_pc());
-#endif
 }
 
 NOINLINE frame os::current_frame() {
@@ -236,13 +207,6 @@ NOINLINE frame os::current_frame() {
 }
 
 // Utility functions
-#ifdef BUILTIN_SIM
-extern "C" void Fetch32PFI () ;
-extern "C" void Fetch32Resume () ;
-extern "C" void FetchNPFI () ;
-extern "C" void FetchNResume () ;
-#endif
-
 extern "C" JNIEXPORT int
 JVM_handle_bsd_signal(int sig,
                         siginfo_t* info,
@@ -312,21 +276,10 @@ JVM_handle_bsd_signal(int sig,
   if (info != NULL && uc != NULL && thread != NULL) {
     pc = (address) os::Bsd::ucontext_get_pc(uc);
 
-#ifdef BUILTIN_SIM
-    if (pc == (address) Fetch32PFI) {
-       uc->uc_mcontext.mc_gpregs.gp_elr = intptr_t(Fetch32Resume) ;
-       return 1 ;
-    }
-    if (pc == (address) FetchNPFI) {
-       uc->uc_mcontext.mc_gpregs.gp_elr = intptr_t (FetchNResume) ;
-       return 1 ;
-    }
-#else
     if (StubRoutines::is_safefetch_fault(pc)) {
       os::Bsd::ucontext_set_pc(uc, StubRoutines::continuation_for_safefetch_fault(pc));
       return 1;
     }
-#endif
 
     // Handle ALL stack overflow variations here
     if (sig == SIGSEGV) {
@@ -513,40 +466,10 @@ void os::print_context(outputStream *st, const void *context) {
 
   const ucontext_t *uc = (const ucontext_t*)context;
   st->print_cr("Registers:");
-#ifdef BUILTIN_SIM
-  st->print(  "RAX=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RAX]);
-  st->print(", RBX=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RBX]);
-  st->print(", RCX=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RCX]);
-  st->print(", RDX=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RDX]);
-  st->cr();
-  st->print(  "RSP=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RSP]);
-  st->print(", RBP=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RBP]);
-  st->print(", RSI=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RSI]);
-  st->print(", RDI=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RDI]);
-  st->cr();
-  st->print(  "R8 =" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R8]);
-  st->print(", R9 =" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R9]);
-  st->print(", R10=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R10]);
-  st->print(", R11=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R11]);
-  st->cr();
-  st->print(  "R12=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R12]);
-  st->print(", R13=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R13]);
-  st->print(", R14=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R14]);
-  st->print(", R15=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_R15]);
-  st->cr();
-  st->print(  "RIP=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_RIP]);
-  st->print(", EFLAGS=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_EFL]);
-  st->print(", CSGSFS=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_CSGSFS]);
-  st->print(", ERR=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_ERR]);
-  st->cr();
-  st->print("  TRAPNO=" INTPTR_FORMAT, uc->uc_mcontext.gregs[REG_TRAPNO]);
-  st->cr();
-#else
   for (int r = 0; r < 31; r++) {
     st->print("R%-2d=", r);
     print_location(st, uc->uc_mcontext.mc_gpregs.gp_x[r]);
   }
-#endif
   st->cr();
 
   intptr_t *sp = (intptr_t *)os::Bsd::ucontext_get_sp(uc);
@@ -576,27 +499,8 @@ void os::print_register_info(outputStream *st, const void *context) {
 
   // this is only for the "general purpose" registers
 
-#ifdef BUILTIN_SIM
-  st->print("RAX="); print_location(st, uc->uc_mcontext.gregs[REG_RAX]);
-  st->print("RBX="); print_location(st, uc->uc_mcontext.gregs[REG_RBX]);
-  st->print("RCX="); print_location(st, uc->uc_mcontext.gregs[REG_RCX]);
-  st->print("RDX="); print_location(st, uc->uc_mcontext.gregs[REG_RDX]);
-  st->print("RSP="); print_location(st, uc->uc_mcontext.gregs[REG_RSP]);
-  st->print("RBP="); print_location(st, uc->uc_mcontext.gregs[REG_RBP]);
-  st->print("RSI="); print_location(st, uc->uc_mcontext.gregs[REG_RSI]);
-  st->print("RDI="); print_location(st, uc->uc_mcontext.gregs[REG_RDI]);
-  st->print("R8 ="); print_location(st, uc->uc_mcontext.gregs[REG_R8]);
-  st->print("R9 ="); print_location(st, uc->uc_mcontext.gregs[REG_R9]);
-  st->print("R10="); print_location(st, uc->uc_mcontext.gregs[REG_R10]);
-  st->print("R11="); print_location(st, uc->uc_mcontext.gregs[REG_R11]);
-  st->print("R12="); print_location(st, uc->uc_mcontext.gregs[REG_R12]);
-  st->print("R13="); print_location(st, uc->uc_mcontext.gregs[REG_R13]);
-  st->print("R14="); print_location(st, uc->uc_mcontext.gregs[REG_R14]);
-  st->print("R15="); print_location(st, uc->uc_mcontext.gregs[REG_R15]);
-#else
   for (int r = 0; r < 31; r++)
     st->print_cr(  "R%d=" INTPTR_FORMAT, r, (uintptr_t)uc->uc_mcontext.mc_gpregs.gp_x[r]);
-#endif
   st->cr();
 }
 
