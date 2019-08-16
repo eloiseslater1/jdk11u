@@ -34,15 +34,11 @@
 
 #include OS_HEADER_INLINE(os)
 
-#ifndef BUILTIN_SIM
 #if defined (__linux__)
 #include <sys/auxv.h>
 #include <asm/hwcap.h>
 #elif defined (__FreeBSD__)
 #include <machine/elf.h>
-#endif
-#else
-#define getauxval(hwcap) 0
 #endif
 
 #ifndef HWCAP_ASIMD
@@ -99,10 +95,6 @@ class VM_Version_StubGenerator: public StubCodeGenerator {
     StubCodeMark mark(this, "VM_Version", "getPsrInfo_stub");
 #   define __ _masm->
     address start = __ pc();
-
-#ifdef BUILTIN_SIM
-    __ c_stub_prolog(1, 0, MacroAssembler::ret_type_void);
-#endif
 
     // void getPsrInfo(VM_Version::PsrInfo* psr_info);
 
