@@ -106,7 +106,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJAVA, \
     jdk_util.c_CFLAGS := $(VERSION_CFLAGS), \
     EXTRA_HEADER_DIRS := libfdlibm, \
     WARNINGS_AS_ERRORS_xlc := false, \
-    DISABLED_WARNINGS_gcc := unused-result, \
+    DISABLED_WARNINGS_gcc := unused-result stringop-truncation, \
     DISABLED_WARNINGS_solstudio := E_STATEMENT_NOT_REACHED, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
@@ -170,6 +170,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJIMAGE, \
     CFLAGS_unix := -UDEBUG, \
     LDFLAGS := $(LDFLAGS_JDKLIB) $(LDFLAGS_CXX_JDK) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
+    DISABLED_WARNINGS_gcc := stringop-truncation stringop-overflow, \
     LIBS_unix := -ljvm $(LIBDL) $(LIBCXX), \
     LIBS_macosx := -lc++, \
     LIBS_windows := jvm.lib, \
@@ -243,6 +244,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJLI, \
         E_ASM_DISABLES_OPTIMIZATION \
         E_STATEMENT_NOT_REACHED, \
     DISABLED_WARNINGS_clang := format-nonliteral, \
+    DISABLED_WARNINGS_gcc := cast-function-type, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
     LDFLAGS_linux := $(call SET_SHARED_LIBRARY_ORIGIN,/..), \
@@ -273,6 +275,7 @@ ifneq ($(findstring $(OPENJDK_TARGET_OS), aix bsd), )
       CFLAGS := $(STATIC_LIBRARY_FLAGS) $(CFLAGS_JDKLIB) $(LIBJLI_CFLAGS) \
           $(addprefix -I, $(LIBJLI_SRC_DIRS)), \
       DISABLED_WARNINGS_clang := format-nonliteral, \
+      DISABLED_WARNINGS_gcc := cast-function-type, \
       ARFLAGS := $(ARFLAGS), \
       OBJECT_DIR := $(SUPPORT_OUTPUTDIR)/native/$(MODULE)/libjli_static))
 
