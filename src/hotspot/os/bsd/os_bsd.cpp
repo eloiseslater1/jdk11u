@@ -2349,54 +2349,13 @@ bool os::Bsd::hugetlbfs_sanity_check(bool warn, size_t page_size) {
 
 // Large page support
 
-static size_t _large_page_size =
-#if defined(__FreeBSD__)
-    AARCH64_ONLY(2 * M)
-    AMD64_ONLY(2 * M)
-    ARM32_ONLY(2 * M)
-    IA32_ONLY(2 * M)
-    PPC_ONLY(4 * M)
-    SPARC_ONLY(4 * M);
-#else
-    0;
-#endif
+static size_t _large_page_size = 0;
 
 void os::large_page_init() {
-#if defined(__FreeBSD__)
-	if (!UseLargePages) return;
-	unsigned int super_pg = 0;
-	size_t length = sizeof(super_pg);
-	// Boot time only knob
-	if (sysctlbyname("vm.pmap.pg_ps_enabled", &super_pg, &length, NULL, 0) == -1 ||
-            super_pg < 1) {
-		UseLargePages = false;
-	}
-#endif
 }
 
 
 char* os::reserve_memory_special(size_t bytes, size_t alignment, char* req_addr, bool exec) {
-#if defined(__FreeBSD__)
-  assert(UseLargePages && os::large_page_size() > 0, "only for mmap large pages");
-  assert(is_aligned(bytes, os::large_page_size()), "Unaligned size");
-  assert(is_aligned(req_addr, os::large_page_size()), "Unaligned base address");
-  char *addr;
-  int err;
-
-  int pflags = PROT_READ|PROT_WRITE;
-  if (exec) {
-    pflags |= PROT_EXEC;
-  }
-  int mflags = MAP_PRIVATE|MAP_ANONYMOUS|
-	       MAP_ALIGNED_SUPER|MAP_FIXED;
-
-  bool warn_on_failure = UseLargePages &&
-                         (!FLAG_IS_DEFAULT(UseLargePages) ||
-                          !FLAG_IS_DEFAULT(LargePageSizeInBytes));
-
-  addr = (char *)mmap(req_addr, bytes, pflags, mflags, -1, 0);
-  err = errno;
-#else
   fatal("This code is not used or maintained.");
 
   // "exec" is passed in but not used.  Creating the shared image for
@@ -2443,7 +2402,6 @@ char* os::reserve_memory_special(size_t bytes, size_t alignment, char* req_addr,
   // terminates. If shmat() is not successful this will remove the shared
   // segment immediately.
   shmctl(shmid, IPC_RMID, NULL);
-#endif
 
   if ((intptr_t)addr == -1) {
     if (warn_on_failure) {
@@ -2459,9 +2417,6 @@ char* os::reserve_memory_special(size_t bytes, size_t alignment, char* req_addr,
 }
 
 bool os::release_memory_special(char* base, size_t bytes) {
-#if defined(__FreeBSD__)
-  return anon_munmap(base, bytes);
-#else
   if (MemTracker::tracking_level() > NMT_minimal) {
     Tracker tkr(Tracker::release);
     // detaching the SHM segment will also delete it, see reserve_memory_special()
@@ -2475,19 +2430,21 @@ bool os::release_memory_special(char* base, size_t bytes) {
   } else {
     return shmdt(base) == 0;
   }
-#endif
 }
 
 size_t os::large_page_size() {
   return _large_page_size;
 }
 
+// HugeTLBFS allows application to commit large page memory on demand;
+// with SysV SHM the entire memory region must be allocated as shared
+// memory.
 bool os::can_commit_large_page_memory() {
-  return false;
+  return UseHugeTLBFS;
 }
 
 bool os::can_execute_large_page_memory() {
-  return true;
+  return UseHugeTLBFS;
 }
 
 char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr, int file_desc) {
