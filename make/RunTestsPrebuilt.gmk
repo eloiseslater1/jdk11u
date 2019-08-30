@@ -225,7 +225,7 @@ else ifeq ($(OPENJDK_TARGET_OS), macosx)
     MEMORY_SIZE := $(shell $(EXPR) `/usr/sbin/sysctl -n hw.memsize` / 1024 / 1024)
 else ifeq ($(OPENJDK_TARGET_OS), bsd)
     NUM_CORES := $(shell /sbin/sysctl -n hw.ncpu)
-    MEMORY_SIZE := $(shell $(EXPR) `/sbin/sysctl -n hw.memsize` / 1024 / 1024)
+    MEMORY_SIZE := $(shell $(EXPR) `/sbin/sysctl -n hw.physmem` / 1024 / 1024)
 else ifeq ($(OPENJDK_TARGET_OS), solaris)
     NUM_CORES := $(shell LC_MESSAGES=C /usr/sbin/psrinfo -v | $(GREP) -c on-line)
     MEMORY_SIZE := $(shell \
