@@ -86,9 +86,9 @@ public class UseCompressedOops {
 
             // Skip the following three test cases if we're on OSX or Solaris.
             //
-            // OSX doesn't seem to care about HeapBaseMinAddress and Solaris
+            // OSX and BSD don't seem to care about HeapBaseMinAddress and Solaris
             // puts the heap way up, forcing different behaviour.
-            if (!Platform.isOSX() && !Platform.isSolaris()) {
+            if (!Platform.isOSX() && !Platform.isBSD() && !Platform.isSolaris()) {
                 // Larger than 4gb heap should result in zero based with shift 3
                 testCompressedOops(args, "-XX:+UseCompressedOops", "-Xmx5g")
                     .shouldContain("Zero based")
