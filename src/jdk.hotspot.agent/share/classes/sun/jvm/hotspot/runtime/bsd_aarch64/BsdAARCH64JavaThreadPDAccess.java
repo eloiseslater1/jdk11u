@@ -29,6 +29,8 @@ import java.io.*;
 import java.util.*;
 import sun.jvm.hotspot.debugger.*;
 import sun.jvm.hotspot.debugger.aarch64.*;
+import sun.jvm.hotspot.debugger.bsd.BsdDebugger;
+import sun.jvm.hotspot.debugger.bsd.BsdDebuggerLocal;
 import sun.jvm.hotspot.runtime.*;
 import sun.jvm.hotspot.runtime.aarch64.*;
 import sun.jvm.hotspot.types.*;
@@ -38,8 +40,9 @@ public class BsdAARCH64JavaThreadPDAccess implements JavaThreadPDAccess {
   private static AddressField  lastJavaFPField;
   private static AddressField  osThreadField;
 
-  // Field from OSThread
+  // Fields from OSThread
   private static CIntegerField osThreadThreadIDField;
+  private static CIntegerField osThreadUniqueThreadIDField;
 
   // This is currently unneeded but is being kept in case we change
   // the currentFrameGuess algorithm
@@ -62,6 +65,7 @@ public class BsdAARCH64JavaThreadPDAccess implements JavaThreadPDAccess {
 
     Type osThreadType = db.lookupType("OSThread");
     osThreadThreadIDField   = osThreadType.getCIntegerField("_thread_id");
+    osThreadUniqueThreadIDField = osThreadType.getCIntegerField("_unique_thread_id");
   }
 
   public Address getLastJavaFP(Address addr) {
@@ -125,8 +129,9 @@ public class BsdAARCH64JavaThreadPDAccess implements JavaThreadPDAccess {
     Address osThreadAddr = osThreadField.getValue(addr);
     // Get the address of the _thread_id from the OSThread
     Address threadIdAddr = osThreadAddr.addOffsetTo(osThreadThreadIDField.getOffset());
+    Address uniqueThreadIdAddr = osThreadAddr.addOffsetTo(osThreadUniqueThreadIDField.getOffset());
 
-    JVMDebugger debugger = VM.getVM().getDebugger();
-    return debugger.getThreadForIdentifierAddress(threadIdAddr);
+    BsdDebuggerLocal debugger = (BsdDebuggerLocal) VM.getVM().getDebugger();
+    return debugger.getThreadForIdentifierAddress(threadIdAddr, uniqueThreadIdAddr);
   }
 }
