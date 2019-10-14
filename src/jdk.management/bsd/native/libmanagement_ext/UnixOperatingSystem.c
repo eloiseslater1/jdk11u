@@ -29,7 +29,9 @@
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #include <sys/time.h>
-#include <sys/user.h>
+#ifndef __NetBSD__
+  #include <sys/user.h>
+#endif
 #include <unistd.h>
 
 #include "jvm.h"
