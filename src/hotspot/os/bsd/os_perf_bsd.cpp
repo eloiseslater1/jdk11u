@@ -34,7 +34,9 @@
   #include <mach/mach.h>
   #include <mach/task_info.h>
 #else
-  #include <sys/user.h>
+  #ifndef __NetBSD__
+    #include <sys/user.h>
+  #endif
   #include <sys/sched.h>
   #include <sys/resource.h>
   #define NET_RT_IFLIST2 NET_RT_IFLIST
