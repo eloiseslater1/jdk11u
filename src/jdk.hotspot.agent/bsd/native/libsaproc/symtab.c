@@ -69,6 +69,9 @@ void build_search_table(symtab_t *symtab) {
     if (is_debug()) {
       DBT rkey, rvalue;
       char* tmp = (char *)malloc(strlen(symtab->symbols[i].name) + 1);
+      if (tmp == NULL) {
+        return;
+      }
       strcpy(tmp, symtab->symbols[i].name);
       rkey.data = tmp;
       rkey.size = strlen(tmp) + 1;
