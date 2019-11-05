@@ -1376,6 +1376,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
   return os::get_default_process_handle();
 #else
   log_info(os)("attempting shared library load of %s", filename);
+
   void * result= ::dlopen(filename, RTLD_LAZY);
   if (result != NULL) {
     Events::log(NULL, "Loaded shared library %s", filename);
@@ -1386,7 +1387,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
 
   Elf32_Ehdr elf_head;
 
-  const char* const error_report = ::dlerror();
+  const char* error_report = ::dlerror();
   if (error_report == NULL) {
     error_report = "dlerror returned no error description";
   }
