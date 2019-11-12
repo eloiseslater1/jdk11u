@@ -45,6 +45,18 @@ class BsdThread implements ThreadProxy {
         this.unique_thread_id = uniqueThreadIdAddr.getCIntegerAt(0, 8, true);
     }
 
+    BsdThread(BsdDebugger debugger, Address threadIdAddr) {
+        this.is_darwin = isDarwin();
+        if (is_darwin) {
+            throw new RuntimeException("Mac OS requires the unique thread id");
+        }
+        this.debugger = debugger;
+        // FIXME: size of data fetched here should be configurable.
+        // However, making it so would produce a dependency on the "types"
+        // package from the debugger package, which is not desired.
+        this.thread_id = (int) threadIdAddr.getCIntegerAt(0, 4, true);
+    }
+
     BsdThread(BsdDebugger debugger, long id) {
         this.is_darwin = isDarwin();
         this.debugger = debugger;

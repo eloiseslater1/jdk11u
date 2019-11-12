@@ -131,7 +131,16 @@ public class BsdAARCH64JavaThreadPDAccess implements JavaThreadPDAccess {
     Address threadIdAddr = osThreadAddr.addOffsetTo(osThreadThreadIDField.getOffset());
     Address uniqueThreadIdAddr = osThreadAddr.addOffsetTo(osThreadUniqueThreadIDField.getOffset());
 
-    BsdDebuggerLocal debugger = (BsdDebuggerLocal) VM.getVM().getDebugger();
-    return debugger.getThreadForIdentifierAddress(threadIdAddr, uniqueThreadIdAddr);
+    JVMDebugger debugger = VM.getVM().getDebugger();
+    // If this is BsdDebuggerLocal, use its getThreadForIdentifierAddress
+    // method that allows the use of two thread ids
+    if (debugger instanceof BsdDebuggerLocal) {
+      return ((BsdDebuggerLocal) debugger).getThreadForIdentifierAddress(
+        threadIdAddr, uniqueThreadIdAddr);
+    }
+
+    // Otherwise fall back to the standard method which only supports
+    // one thread id
+    return debugger.getThreadForIdentifierAddress(threadIdAddr);
   }
 }
