@@ -41,6 +41,7 @@
 #include FT_SIZES_H
 #include FT_OUTLINE_H
 #include FT_SYNTHESIS_H
+#include FT_LCD_FILTER_H
 #include FT_MODULE_H
 
 #include "fontscaler.h"
@@ -490,6 +491,8 @@ static int setupFTContext(JNIEnv *env,
         if (errCode == 0) {
             errCode = FT_Activate_Size(scalerInfo->face->size);
         }
+
+        FT_Library_SetLcdFilter(scalerInfo->library, FT_LCD_FILTER_DEFAULT);
     }
 
     return errCode;
@@ -672,10 +675,14 @@ Java_sun_font_FreetypeFontScaler_getGlyphMetricsNative(
                                  pScalerContext, pScaler, glyphCode);
      info = (GlyphInfo*) jlong_to_ptr(image);
 
-     (*env)->SetFloatField(env, metrics, sunFontIDs.xFID, info->advanceX);
-     (*env)->SetFloatField(env, metrics, sunFontIDs.yFID, info->advanceY);
-
-     free(info);
+     if (info != NULL) {
+         (*env)->SetFloatField(env, metrics, sunFontIDs.xFID, info->advanceX);
+         (*env)->SetFloatField(env, metrics, sunFontIDs.yFID, info->advanceY);
+         free(info);
+     } else {
+         (*env)->SetFloatField(env, metrics, sunFontIDs.xFID, 0.0f);
+         (*env)->SetFloatField(env, metrics, sunFontIDs.yFID, 0.0f);
+     }
 }
 
 
