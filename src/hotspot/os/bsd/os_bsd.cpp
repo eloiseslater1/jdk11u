@@ -108,11 +108,7 @@
 # include <sys/syscall.h>
 
 #ifdef __FreeBSD__
-# if __FreeBSD_version > 900030
-#  include <pthread_np.h>
-# else
-#  include <sys/thr.h>
-# endif
+# include <pthread_np.h>
 # include <sys/cpuset.h>
 # include <vm/vm_param.h>
 #endif
