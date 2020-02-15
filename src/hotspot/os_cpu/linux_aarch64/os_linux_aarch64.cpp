@@ -79,9 +79,6 @@
 #define REG_FP 29
 #define REG_LR 30
 
-#define SPELL_REG_SP "sp"
-#define SPELL_REG_FP "x29"
-
 NOINLINE address os::current_stack_pointer() {
   return (address)__builtin_frame_address(0);
 }
@@ -212,12 +209,6 @@ NOINLINE frame os::current_frame() {
 }
 
 // Utility functions
-
-// From IA32 System Programming Guide
-enum {
-  trap_page_fault = 0xE
-};
-
 extern "C" JNIEXPORT int
 JVM_handle_linux_signal(int sig,
                         siginfo_t* info,
