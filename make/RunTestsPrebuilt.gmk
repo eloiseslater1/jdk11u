@@ -274,6 +274,10 @@ ifneq ($(DEVKIT_HOME), )
     LD_JAOTC := ld
     LIBRARY_PREFIX := lib
     SHARED_LIBRARY_SUFFIX := .so
+  else ifeq ($(OPENJDK_TARGET_OS), bsd)
+    LD_JAOTC := $(DEVKIT_HOME)/bin/ld
+    LIBRARY_PREFIX := lib
+    SHARED_LIBRARY_SUFFIX := .so
   endif
 else
   LD := ld
