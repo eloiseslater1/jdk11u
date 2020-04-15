@@ -166,7 +166,6 @@ define SetupBuildLauncherBody
           $$($1_CFLAGS), \
       CFLAGS_solaris := -KPIC -DHAVE_GETHRTIME, \
       CFLAGS_windows := $$($1_CFLAGS_windows), \
-      CFLAGS_bsd := -fPIC, \
       LDFLAGS := $$(LDFLAGS_JDKEXE) \
           $$(ORIGIN_ARG) \
           $$($1_LDFLAGS), \
