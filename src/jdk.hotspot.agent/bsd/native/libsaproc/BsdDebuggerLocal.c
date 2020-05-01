@@ -169,6 +169,39 @@ static void fillThreadsAndLoadObjects(JNIEnv* env, jobject this_obj, struct ps_p
   }
 }
 
+
+/*
+ * Verify that a named ELF binary file (core or executable) has the same
+ * bitness as ourselves.
+ * Throw an exception if there is a mismatch or other problem.
+ *
+ * If we proceed using a mismatched debugger/debuggee, the best to hope
+ * for is a missing symbol, the worst is a crash searching for debug symbols.
+ */
+void verifyBitness(JNIEnv *env, const char *binaryName) {
+  int fd = open(binaryName, O_RDONLY);
+  if (fd < 0) {
+    THROW_NEW_DEBUGGER_EXCEPTION("cannot open binary file");
+  }
+  unsigned char elf_ident[EI_NIDENT];
+  int i = read(fd, &elf_ident, sizeof(elf_ident));
+  close(fd);
+
+  if (i < 0) {
+    THROW_NEW_DEBUGGER_EXCEPTION("cannot read binary file");
+  }
+#ifndef _LP64
+  if (elf_ident[EI_CLASS] == ELFCLASS64) {
+    THROW_NEW_DEBUGGER_EXCEPTION("debuggee is 64 bit, use 64-bit java for debugger");
+  }
+#else
+  if (elf_ident[EI_CLASS] != ELFCLASS64) {
+    THROW_NEW_DEBUGGER_EXCEPTION("debuggee is 32 bit, use 32 bit java for debugger");
+  }
+#endif
+}
+
+
 /*
  * Class:     sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal
  * Method:    attach0
@@ -195,15 +228,22 @@ JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_attach
  */
 JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_attach0__Ljava_lang_String_2Ljava_lang_String_2
   (JNIEnv *env, jobject this_obj, jstring execName, jstring coreName) {
-  const char *execName_cstr;
-  const char *coreName_cstr;
+  const char *execName_cstr = NULL;
+  const char *coreName_cstr = NULL;
   jboolean isCopy;
   struct ps_prochandle* ph;
 
   execName_cstr = (*env)->GetStringUTFChars(env, execName, &isCopy);
   CHECK_EXCEPTION;
   coreName_cstr = (*env)->GetStringUTFChars(env, coreName, &isCopy);
-  CHECK_EXCEPTION;
+  if ((*env)->ExceptionOccurred(env)) {
+    goto cleanup;
+  }
+
+  verifyBitness(env, execName_cstr);
+  if ((*env)->ExceptionOccurred(env)) {
+    goto cleanup;
+  }
 
   if ( (ph = Pgrab_core(execName_cstr, coreName_cstr)) == NULL) {
     (*env)->ReleaseStringUTFChars(env, execName, execName_cstr);
@@ -211,9 +251,11 @@ JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_attach
     THROW_NEW_DEBUGGER_EXCEPTION("Can't attach to the core file");
   }
   (*env)->SetLongField(env, this_obj, p_ps_prochandle_ID, (jlong)(intptr_t)ph);
-  (*env)->ReleaseStringUTFChars(env, execName, execName_cstr);
-  (*env)->ReleaseStringUTFChars(env, coreName, coreName_cstr);
   fillThreadsAndLoadObjects(env, this_obj, ph);
+
+cleanup:
+  if (execName_cstr != NULL) { (*env)->ReleaseStringUTFChars(env, execName, execName_cstr); }
+  if (coreName_cstr != NULL) { (*env)->ReleaseStringUTFChars(env, coreName, coreName_cstr); }
 }
 
 /*
@@ -247,7 +289,12 @@ JNIEXPORT jlong JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_looku
     CHECK_EXCEPTION_(0);
   }
   symbolName_cstr = (*env)->GetStringUTFChars(env, symbolName, &isCopy);
-  CHECK_EXCEPTION_(0);
+  if ((*env)->ExceptionOccurred(env)) {
+    if (objectName_cstr != NULL) {
+      (*env)->ReleaseStringUTFChars(env, objectName, objectName_cstr);
+    }
+    return 0;
+  }
 
   addr = (jlong) lookup_symbol(ph, objectName_cstr, symbolName_cstr);
 
