@@ -1161,9 +1161,16 @@ void os::abort(bool dump_core, void* siginfo, const void* context) {
 }
 
 // Die immediately, no exit hook, no abort hook, no cleanup.
+// Dump a core file, if possible, for debugging.
 void os::die() {
-  // _exit() on BsdThreads only kills current thread
-  ::abort();
+  if (TestUnresponsiveErrorHandler && !CreateCoredumpOnCrash) {
+    // For TimeoutInErrorHandlingTest.java, we just kill the VM
+    // and don't take the time to generate a core file.
+    os::signal_raise(SIGKILL);
+  } else {
+    // _exit() on BsdThreads only kills current thread
+    ::abort();
+  }
 }
 
 // This method is a copy of JDK's sysGetLastErrorString
@@ -1719,6 +1726,8 @@ void os::print_os_info(outputStream* st) {
   os::Posix::print_rlimit_info(st);
 
   os::Posix::print_load_average(st);
+
+  VM_Version::print_platform_virtualization_info(st);
 }
 
 void os::pd_print_cpu_info(outputStream* st, char* buf, size_t buflen) {
