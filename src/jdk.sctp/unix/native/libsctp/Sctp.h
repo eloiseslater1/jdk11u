@@ -333,12 +333,12 @@ typedef int sctp_peeloff_func(int sock, sctp_assoc_t id);
 
 #ifndef __FreeBSD__
 
-sctp_getladdrs_func* nio_sctp_getladdrs;
-sctp_freeladdrs_func* nio_sctp_freeladdrs;
-sctp_getpaddrs_func* nio_sctp_getpaddrs;
-sctp_freepaddrs_func* nio_sctp_freepaddrs;
-sctp_bindx_func* nio_sctp_bindx;
-sctp_peeloff_func* nio_sctp_peeloff;
+extern sctp_getladdrs_func* nio_sctp_getladdrs;
+extern sctp_freeladdrs_func* nio_sctp_freeladdrs;
+extern sctp_getpaddrs_func* nio_sctp_getpaddrs;
+extern sctp_freepaddrs_func* nio_sctp_freepaddrs;
+extern sctp_bindx_func* nio_sctp_bindx;
+extern sctp_peeloff_func* nio_sctp_peeloff;
 
 #else
 
