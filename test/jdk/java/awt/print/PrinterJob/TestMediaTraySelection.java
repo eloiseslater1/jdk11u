@@ -23,7 +23,7 @@
 /*
  * @bug 6357887 8165146 8234393
  * @summary  Verifies if selected printertray is used
- * @requires (os.family == "linux" | os.family == "solaris" | os.family == "mac")
+ * @requires (os.family == "linux" | os.family == "solaris" | os.family == "mac" | os.family == "freebsd" | os.family == "netbsd" | os.family == "openbsd")
  * @run main/manual TestMediaTraySelection
  */
 
