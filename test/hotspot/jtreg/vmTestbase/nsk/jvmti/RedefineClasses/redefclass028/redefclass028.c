@@ -251,7 +251,7 @@ jint Agent_Initialize(JavaVM *jvm, char *options, void *reserved) {
         return JNI_ERR;
 
     /* obtain WAITTIME parameter */
-        timeout = nsk_jvmti_getWaitTime() * 60000;
+    timeout = nsk_jvmti_getWaitTime() * 60000;
     NSK_DISPLAY1("waittime=%d msecs\n", (int) timeout);
 
     /* create JVMTI environment */
