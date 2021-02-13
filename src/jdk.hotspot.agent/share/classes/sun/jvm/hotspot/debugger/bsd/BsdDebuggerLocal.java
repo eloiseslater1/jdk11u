@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2017, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -95,7 +95,8 @@ public class BsdDebuggerLocal extends DebuggerBase implements BsdDebugger {
 
     private native static void init0()
                                 throws DebuggerException;
-    private native void attach0(int pid)
+    private native void setSAAltRoot0(String altroot);
+    private native void attach0(int pid, boolean isInContainer)
                                 throws DebuggerException;
     private native void attach0(String execName, String coreName)
                                 throws DebuggerException;
@@ -268,10 +269,12 @@ public class BsdDebuggerLocal extends DebuggerBase implements BsdDebugger {
         checkAttached();
         threadList = new ArrayList();
         loadObjectList = new ArrayList();
+
         class AttachTask implements WorkerThreadTask {
            int pid;
+           boolean isInContainer;
            public void doit(BsdDebuggerLocal debugger) {
-              debugger.attach0(pid);
+              debugger.attach0(pid, isInContainer);
               debugger.attached = true;
               debugger.isCore = false;
               findABIVersion();
@@ -280,6 +283,7 @@ public class BsdDebuggerLocal extends DebuggerBase implements BsdDebugger {
 
         AttachTask task = new AttachTask();
         task.pid = processID;
+        task.isInContainer = false;
         workerThread.execute(task);
     }
 
