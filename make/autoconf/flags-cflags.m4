@@ -63,7 +63,7 @@ AC_DEFUN([FLAGS_SETUP_SHARED_LIBS],
       SET_SHARED_LIBRARY_MAPFILE='-Wl,-version-script=[$]1'
 
       # arm specific settings
-      if test "x$OPENJDK_TARGET_CPU" = "xarm"; then
+      if test "x$OPENJDK_TARGET_CPU" = "xarm" && test "x$OPENJDK_TARGET_OS" = xlinux; then
         # '-Wl,-z,origin' isn't used on arm.
         SET_SHARED_LIBRARY_ORIGIN='-Wl,-rpath,\$$$$ORIGIN[$]1'
       else
@@ -745,6 +745,13 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_CPU_DEP],
       fi
     else
       AC_MSG_RESULT([no])
+    fi
+  fi
+
+  if test "x$TOOLCHAIN_TYPE" = xclang; then
+    if test "x$FLAGS_CPU" = xarm; then
+      $1_CFLAGS_CPU="-fsigned-char $ARM_ARCH_TYPE_FLAGS $ARM_FLOAT_TYPE_FLAGS -DJDK_ARCH_ABI_PROP_NAME='\"\$(JDK_ARCH_ABI_PROP_NAME)\"'"
+      $1_CFLAGS_CPU_JVM="-DARM"
     fi
   fi
 
