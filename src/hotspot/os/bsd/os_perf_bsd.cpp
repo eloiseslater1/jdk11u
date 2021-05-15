@@ -27,7 +27,6 @@
 #include "runtime/os.hpp"
 #include "runtime/os_perf.hpp"
 #include "utilities/globalDefinitions.hpp"
-
 #include CPU_HEADER(vm_version_ext)
 
 #ifdef __APPLE__
