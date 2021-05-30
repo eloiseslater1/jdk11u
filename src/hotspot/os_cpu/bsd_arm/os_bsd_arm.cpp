@@ -311,6 +311,15 @@ extern "C" int JVM_handle_bsd_signal(int sig, siginfo_t* info,
     }
   }
 
+  // Handle SafeFetch faults:
+  if (uc != NULL) {
+    address const pc = (address) os::Bsd::ucontext_get_pc(uc);
+    if (pc && StubRoutines::is_safefetch_fault(pc)) {
+      os::Bsd::ucontext_set_pc(uc, StubRoutines::continuation_for_safefetch_fault(pc));
+      return 1;
+    }
+  }
+
   address stub = NULL;
   address pc = NULL;
   bool unsafe_access = false;
@@ -322,10 +331,6 @@ extern "C" int JVM_handle_bsd_signal(int sig, siginfo_t* info,
     if (sig == SIGSEGV) {
       address addr = (address) info->si_addr;
 
-      if (StubRoutines::is_safefetch_fault(pc)) {
-        os::Bsd::ucontext_set_pc(uc, StubRoutines::continuation_for_safefetch_fault(pc));
-        return 1;
-      }
       // check if fault address is within thread stack
       if (addr < thread->stack_base() &&
           addr >= thread->stack_base() - thread->stack_size()) {
