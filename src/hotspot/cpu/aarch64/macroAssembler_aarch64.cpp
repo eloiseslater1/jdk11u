@@ -700,6 +700,11 @@ void MacroAssembler::call_VM_base(Register oop_result,
   // do the call, remove parameters
   MacroAssembler::call_VM_leaf_base(entry_point, number_of_arguments, &l);
 
+  // lr could be poisoned with PAC signature during throw_pending_exception
+  // if it was tail-call optimized by compiler, since lr is not callee-saved
+  // reload it with proper value
+  adr(lr, l);
+
   // reset last Java frame
   // Only interpreter should have to clear fp
   reset_last_Java_frame(true);
@@ -1026,27 +1031,22 @@ void MacroAssembler::lookup_interface_method(Register recv_klass,
   // }
   Label search, found_method;
 
-  for (int peel = 1; peel >= 0; peel--) {
-    ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
-    cmp(intf_klass, method_result);
-
-    if (peel) {
-      br(Assembler::EQ, found_method);
-    } else {
-      br(Assembler::NE, search);
-      // (invert the test to fall through to found_method...)
-    }
-
-    if (!peel)  break;
-
-    bind(search);
-
-    // Check that the previous entry is non-null.  A null entry means that
-    // the receiver class doesn't implement the interface, and wasn't the
-    // same as when the caller was compiled.
-    cbz(method_result, L_no_such_interface);
+  ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
+  cmp(intf_klass, method_result);
+  br(Assembler::EQ, found_method);
+  bind(search);
+  // Check that the previous entry is non-null.  A null entry means that
+  // the receiver class doesn't implement the interface, and wasn't the
+  // same as when the caller was compiled.
+  cbz(method_result, L_no_such_interface);
+  if (itableOffsetEntry::interface_offset_in_bytes() != 0) {
     add(scan_temp, scan_temp, scan_step);
+    ldr(method_result, Address(scan_temp, itableOffsetEntry::interface_offset_in_bytes()));
+  } else {
+    ldr(method_result, Address(pre(scan_temp, scan_step)));
   }
+  cmp(intf_klass, method_result);
+  br(Assembler::NE, search);
 
   bind(found_method);
 
