@@ -155,7 +155,7 @@ define SetupBuildLauncherBody
         -framework ApplicationServices
   endif
 
-  ifeq ($(OPENJDK_TARGET_OS), aix)
+  ifneq ($(findstring $(OPENJDK_TARGET_OS), aix bsd), )
     $1_LDFLAGS += -L$(SUPPORT_OUTPUTDIR)/native/java.base
     $1_LIBS += -ljli_static
   endif
@@ -190,6 +190,7 @@ define SetupBuildLauncherBody
       LIBS := $(JDKEXE_LIBS) $$($1_LIBS), \
       LIBS_unix := $$($1_LIBS_unix), \
       LIBS_linux := -lpthread -ljli $(LIBDL), \
+      LIBS_bsd := -pthread, \
       LIBS_macosx := -ljli, \
       LIBS_solaris := -ljli -lthread $(LIBDL), \
       LIBS_windows := $$($1_WINDOWS_JLI_LIB) \
@@ -207,7 +208,7 @@ define SetupBuildLauncherBody
 
   $$(BUILD_LAUNCHER_$1): $$(BUILD_PLIST_$1)
 
-  ifeq ($(OPENJDK_TARGET_OS), aix)
+  ifneq ($(findstring $(OPENJDK_TARGET_OS), aix bsd), )
     $$(BUILD_LAUNCHER_$1): $(call FindStaticLib, java.base, jli_static)
   endif
 

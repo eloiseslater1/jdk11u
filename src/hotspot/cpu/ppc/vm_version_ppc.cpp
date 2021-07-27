@@ -37,7 +37,10 @@
 #include "utilities/defaultStream.hpp"
 #include "utilities/globalDefinitions.hpp"
 
+#ifndef _ALLBSD_SOURCE
 #include <sys/sysinfo.h>
+#endif
+
 #if defined(_AIX)
 #include <libperfstat.h>
 #endif

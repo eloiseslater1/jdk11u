@@ -35,6 +35,12 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
 else ifeq ($(OPENJDK_TARGET_OS), solaris)
   SA_LDFLAGS := -mt
 
+else ifeq ($(OPENJDK_TARGET_OS), bsd)
+  SA_CFLAGS := -Wno-error=format-nonliteral -Wno-sign-compare
+  ifeq ($(TOOLCHAIN_TYPE), clang)
+    SA_CFLAGS += -Wno-error=tautological-pointer-compare
+  endif
+
 else ifeq ($(OPENJDK_TARGET_OS), macosx)
   SA_CFLAGS := -Damd64 -D_GNU_SOURCE -mno-omit-leaf-frame-pointer \
       -mstack-alignment=16 -fPIC
@@ -59,6 +65,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBSA, \
     NAME := saproc, \
     OPTIMIZATION := HIGH, \
     DISABLED_WARNINGS_microsoft := 4267, \
+    DISABLED_WARNINGS_clang := format-nonliteral, \
     DISABLED_WARNINGS_gcc := sign-compare, \
     DISABLED_WARNINGS_CXX_solstudio := truncwarn unknownpragma, \
     CFLAGS := $(CFLAGS_JDKLIB) $(SA_CFLAGS), \
@@ -66,6 +73,7 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBSA, \
     EXTRA_SRC := $(LIBSA_EXTRA_SRC), \
     LDFLAGS := $(LDFLAGS_JDKLIB) $(SA_LDFLAGS), \
     LIBS_linux := -lthread_db $(LIBDL), \
+    LIBS_bsd := -lutil $(LIBDL), \
     LIBS_solaris := -ldl -ldemangle -lthread -lproc, \
     LIBS_macosx := -framework Foundation \
         -framework JavaRuntimeSupport -framework Security -framework CoreFoundation, \

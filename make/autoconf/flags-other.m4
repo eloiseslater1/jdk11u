@@ -57,6 +57,8 @@ AC_DEFUN([FLAGS_SETUP_STRIPFLAGS],
     STRIPFLAGS="-S"
   elif test "x$OPENJDK_TARGET_OS" = xaix; then
     STRIPFLAGS="-X32_64"
+  elif test "x$OPENJDK_TARGET_OS" = xbsd; then
+    STRIPFLAGS="-g"
   fi
 
   AC_SUBST(STRIPFLAGS)
@@ -116,6 +118,12 @@ AC_DEFUN([FLAGS_SETUP_ASFLAGS],
     if test -n "$MACOSX_VERSION_MAX"; then
         JVM_BASIC_ASFLAGS+="$OS_CFLAGS \
             -DMAC_OS_X_VERSION_MAX_ALLOWED=$MACOSX_VERSION_MAX_NODOTS"
+    fi
+  fi
+  if test "x$OPENJDK_TARGET_OS" = xbsd; then
+    JVM_BASIC_ASFLAGS="-x assembler-with-cpp -mno-omit-leaf-frame-pointer"
+    if test "x$TOOLCHAIN_TYPE" = xclang; then
+      JVM_BASIC_ASFLAGS+=" -mstack-alignment=16"
     fi
   fi
 ])

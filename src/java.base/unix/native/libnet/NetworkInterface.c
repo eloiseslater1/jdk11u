@@ -42,11 +42,24 @@
 #include <sys/sockio.h>
 #endif
 
-#if defined(_ALLBSD_SOURCE)
+#if defined(MACOSX)
 #include <net/ethernet.h>
 #include <net/if_dl.h>
 #include <ifaddrs.h>
 #endif
+
+#if defined(_BSDONLY_SOURCE)
+#if defined(__FreeBSD__)
+#include <net/ethernet.h>
+#include <net/if_var.h>
+#elif defined(__OpenBSD__)
+#include <netinet/if_ether.h>
+#elif defined(__NetBSD__)
+#include <net/if_ether.h>
+#endif /* __FreeBSD __ */
+#include <net/if_dl.h>
+#include <ifaddrs.h>
+#endif /* _BSDONLY_SOURCE */
 
 #include "net_util.h"
 
@@ -2056,10 +2069,6 @@ static netif *enumIPv6Interfaces(JNIEnv *env, int sock, netif *ifs) {
         // ignore non IPv6 addresses
         if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET6)
             continue;
-
-        // set scope ID to interface index
-        ((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_scope_id =
-            getIndex(sock, ifa->ifa_name);
 
         // add interface to the list
         ifs = addif(env, sock, ifa->ifa_name, ifs, ifa->ifa_addr, NULL,

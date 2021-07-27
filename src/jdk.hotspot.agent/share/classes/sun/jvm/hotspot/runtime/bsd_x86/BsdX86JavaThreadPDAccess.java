@@ -28,6 +28,8 @@ import java.io.*;
 import java.util.*;
 import sun.jvm.hotspot.debugger.*;
 import sun.jvm.hotspot.debugger.x86.*;
+import sun.jvm.hotspot.debugger.bsd.BsdDebugger;
+import sun.jvm.hotspot.debugger.bsd.BsdDebuggerLocal;
 import sun.jvm.hotspot.runtime.*;
 import sun.jvm.hotspot.runtime.x86.*;
 import sun.jvm.hotspot.types.*;
@@ -37,8 +39,9 @@ public class BsdX86JavaThreadPDAccess implements JavaThreadPDAccess {
   private static AddressField  lastJavaFPField;
   private static AddressField  osThreadField;
 
-  // Field from OSThread
+  // Fields from OSThread
   private static CIntegerField osThreadThreadIDField;
+  private static CIntegerField osThreadUniqueThreadIDField;
 
   // This is currently unneeded but is being kept in case we change
   // the currentFrameGuess algorithm
@@ -61,6 +64,7 @@ public class BsdX86JavaThreadPDAccess implements JavaThreadPDAccess {
 
     Type osThreadType = db.lookupType("OSThread");
     osThreadThreadIDField   = osThreadType.getCIntegerField("_thread_id");
+    osThreadUniqueThreadIDField = osThreadType.getCIntegerField("_unique_thread_id");
   }
 
   public    Address getLastJavaFP(Address addr) {
@@ -124,8 +128,18 @@ public class BsdX86JavaThreadPDAccess implements JavaThreadPDAccess {
     Address osThreadAddr = osThreadField.getValue(addr);
     // Get the address of the _thread_id from the OSThread
     Address threadIdAddr = osThreadAddr.addOffsetTo(osThreadThreadIDField.getOffset());
+    Address uniqueThreadIdAddr = osThreadAddr.addOffsetTo(osThreadUniqueThreadIDField.getOffset());
 
     JVMDebugger debugger = VM.getVM().getDebugger();
+    // If this is BsdDebuggerLocal, use its getThreadForIdentifierAddress
+    // method that allows the use of two thread ids
+    if (debugger instanceof BsdDebuggerLocal) {
+      return ((BsdDebuggerLocal) debugger).getThreadForIdentifierAddress(
+        threadIdAddr, uniqueThreadIdAddr);
+    }
+
+    // Otherwise fall back to the standard method which only supports
+    // one thread id
     return debugger.getThreadForIdentifierAddress(threadIdAddr);
   }
 }

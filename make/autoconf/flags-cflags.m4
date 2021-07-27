@@ -63,7 +63,7 @@ AC_DEFUN([FLAGS_SETUP_SHARED_LIBS],
       SET_SHARED_LIBRARY_MAPFILE='-Wl,-version-script=[$]1'
 
       # arm specific settings
-      if test "x$OPENJDK_TARGET_CPU" = "xarm"; then
+      if test "x$OPENJDK_TARGET_CPU" = "xarm" && test "x$OPENJDK_TARGET_OS" = xlinux; then
         # '-Wl,-z,origin' isn't used on arm.
         SET_SHARED_LIBRARY_ORIGIN='-Wl,-rpath,\$$$$ORIGIN[$]1'
       else
@@ -420,7 +420,8 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
   elif test "x$OPENJDK_TARGET_OS" = xaix; then
     CFLAGS_OS_DEF_JVM="-DAIX"
   elif test "x$OPENJDK_TARGET_OS" = xbsd; then
-    CFLAGS_OS_DEF_JDK="-D_ALLBSD_SOURCE"
+    CFLAGS_OS_DEF_JVM="-D_ALLBSD_SOURCE -D_BSDONLY_SOURCE"
+    CFLAGS_OS_DEF_JDK="-D_ALLBSD_SOURCE -D_BSDONLY_SOURCE -D_REENTRANT"
   elif test "x$OPENJDK_TARGET_OS" = xwindows; then
     CFLAGS_OS_DEF_JVM="-D_WINDOWS -DWIN32 -D_JNI_IMPLEMENTATION_"
   fi
@@ -521,9 +522,23 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
     # works for all platforms.
     TOOLCHAIN_CFLAGS_JVM="$TOOLCHAIN_CFLAGS_JVM -mno-omit-leaf-frame-pointer -mstack-alignment=16"
 
+    if test "x$OPENJDK_TARGET_CPU" = xx86; then
+      TOOLCHAIN_CFLAGS_JVM="$TOOLCHAIN_CFLAGS_JVM -mstackrealign"
+    fi
+
     if test "x$OPENJDK_TARGET_OS" = xlinux; then
       TOOLCHAIN_CFLAGS_JDK="-pipe"
       TOOLCHAIN_CFLAGS_JDK_CONLY="-fno-strict-aliasing" # technically NOT for CXX
+    elif test "x$OPENJDK_TARGET_OS" = xbsd; then
+      TOOLCHAIN_CFLAGS_JDK="-pipe"
+      TOOLCHAIN_CFLAGS_JDK_CONLY="-fno-strict-aliasing" # technically NOT for CXX
+
+      CXXSTD_CXXFLAG="-std=gnu++98"
+      FLAGS_CXX_COMPILER_CHECK_ARGUMENTS(ARGUMENT: [$CXXSTD_CXXFLAG -Werror],
+    						   IF_FALSE: [CXXSTD_CXXFLAG=""])
+      TOOLCHAIN_CFLAGS_JDK_CXXONLY="$CXXSTD_CXXFLAG"
+      TOOLCHAIN_CFLAGS_JVM="$TOOLCHAIN_CFLAGS_JVM $CXXSTD_CXXFLAG"
+      ADLC_CXXFLAG="$CXXSTD_CXXFLAG"
     fi
   elif test "x$TOOLCHAIN_TYPE" = xsolstudio; then
     TOOLCHAIN_CFLAGS_JDK="-mt"
@@ -568,7 +583,7 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_HELPER],
     fi
   elif test "x$TOOLCHAIN_TYPE" = xclang; then
     WARNING_CFLAGS_JVM="$WARNING_CFLAGS_JVM -Wno-deprecated"
-    if test "x$OPENJDK_TARGET_OS" = xlinux; then
+    if test "x$OPENJDK_TARGET_OS" = xlinux || test "x$OPENJDK_TARGET_OS" = xbsd; then
       WARNING_CFLAGS_JVM="$WARNING_CFLAGS_JVM -Wno-sometimes-uninitialized"
       WARNING_CFLAGS_JDK="-Wall -Wextra -Wno-unused -Wno-unused-parameter -Wformat=2"
     fi
@@ -689,7 +704,7 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_CPU_DEP],
   if test "x$FLAGS_CPU_BITS" = x64; then
     # -D_LP64=1 is only set on linux and mac. Setting on windows causes diff in
     # unpack200.exe.
-    if test "x$FLAGS_OS" = xlinux || test "x$FLAGS_OS" = xmacosx; then
+    if test "x$FLAGS_OS" = xlinux || test "x$FLAGS_OS" = xmacosx || test "x$FLAGS_OS" = xbsd; then
       $1_DEFINES_CPU_JDK="${$1_DEFINES_CPU_JDK} -D_LP64=1"
     fi
     if test "x$FLAGS_OS" != xsolaris && test "x$FLAGS_OS" != xaix; then
@@ -730,6 +745,13 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_CPU_DEP],
       fi
     else
       AC_MSG_RESULT([no])
+    fi
+  fi
+
+  if test "x$TOOLCHAIN_TYPE" = xclang; then
+    if test "x$FLAGS_CPU" = xarm; then
+      $1_CFLAGS_CPU="-fsigned-char $ARM_ARCH_TYPE_FLAGS $ARM_FLOAT_TYPE_FLAGS -DJDK_ARCH_ABI_PROP_NAME='\"\$(JDK_ARCH_ABI_PROP_NAME)\"'"
+      $1_CFLAGS_CPU_JVM="-DARM"
     fi
   fi
 
@@ -776,6 +798,14 @@ AC_DEFUN([FLAGS_SETUP_CFLAGS_CPU_DEP],
         # for all archs except arm and ppc, prevent gcc to omit frame pointer
         $1_CFLAGS_CPU_JDK="${$1_CFLAGS_CPU_JDK} -fno-omit-frame-pointer"
       fi
+    elif test "x$OPENJDK_TARGET_OS_ENV" = xbsd.freebsd; then
+        if test "x$FLAGS_CPU" = xppc64; then
+            $1_CFLAGS_CPU_JVM="${$1_CFLAGS_CPU_JVM} -DABI_ELFv2 -mcpu=powerpc64 -mtune=power5"
+        elif test "x$FLAGS_CPU" = xppc64le; then
+            # Little endian machine uses ELFv2 ABI.
+            # Use Power8, this is the first CPU to support PPC64 LE with ELFv2 ABI.
+            $1_CFLAGS_CPU_JVM="${$1_CFLAGS_CPU_JVM} -DABI_ELFv2 -mcpu=power8 -mtune=power8"
+        fi
     fi
 
   elif test "x$TOOLCHAIN_TYPE" = xsolstudio; then

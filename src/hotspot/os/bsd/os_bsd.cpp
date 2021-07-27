@@ -82,7 +82,6 @@
 # include <stdio.h>
 # include <unistd.h>
 # include <sys/resource.h>
-# include <pthread.h>
 # include <sys/stat.h>
 # include <sys/time.h>
 # include <sys/times.h>
@@ -100,14 +99,26 @@
 # include <sys/shm.h>
 #ifndef __APPLE__
 # include <link.h>
+# include <elf.h>
+# include <stdlib.h>
 #endif
 # include <stdint.h>
 # include <inttypes.h>
 # include <sys/ioctl.h>
 # include <sys/syscall.h>
 
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-  #include <elf.h>
+#ifdef __FreeBSD__
+# include <pthread_np.h>
+# include <sys/cpuset.h>
+# include <vm/vm_param.h>
+#endif
+
+#ifdef __NetBSD__
+#include <lwp.h>
+#endif
+
+#ifdef __OpenBSD__
+# include <pthread_np.h>
 #endif
 
 #ifdef __APPLE__
@@ -119,6 +130,10 @@
 
 #ifndef MAP_ANONYMOUS
   #define MAP_ANONYMOUS MAP_ANON
+#endif
+
+#ifndef MAP_NORESERVE
+  #define MAP_NORESERVE 0
 #endif
 
 #define MAX_PATH    (2 * K)
@@ -137,6 +152,7 @@ mach_timebase_info_data_t os::Bsd::_timebase_info = {0, 0};
 volatile uint64_t         os::Bsd::_max_abstime   = 0;
 #else
 int (*os::Bsd::_clock_gettime)(clockid_t, struct timespec *) = NULL;
+int (*os::Bsd::_getcpuclockid)(pthread_t, clockid_t *) = NULL;
 #endif
 pthread_t os::Bsd::_main_thread;
 int os::Bsd::_page_size = -1;
@@ -180,6 +196,26 @@ julong os::Bsd::available_memory() {
   if (kerr == KERN_SUCCESS) {
     available = vmstat.free_count * os::vm_page_size();
   }
+#elif defined(__FreeBSD__)
+  static const char *vm_stats[] = {
+    "vm.stats.vm.v_free_count",
+    "vm.stats.vm.v_cache_count",
+    "vm.stats.vm.v_inactive_count"
+  };
+  size_t size;
+  julong free_pages;
+  u_int i, npages;
+
+  for (i = 0, free_pages = 0; i < sizeof(vm_stats) / sizeof(vm_stats[0]); i++) {
+    size = sizeof(npages);
+    if (sysctlbyname(vm_stats[i], &npages, &size, NULL, 0) == -1) {
+      free_pages = 0;
+      break;
+    }
+    free_pages += npages;
+  }
+  if (free_pages > 0)
+    available = free_pages * os::vm_page_size();
 #endif
   return available;
 }
@@ -210,7 +246,11 @@ bool os::have_special_privileges() {
   static bool init = false;
   static bool privileges = false;
   if (!init) {
+#ifdef __APPLE__
     privileges = (getuid() != geteuid()) || (getgid() != getegid());
+#else
+    privileges = issetugid();
+#endif
     init = true;
   }
   return privileges;
@@ -231,12 +271,16 @@ static char cpu_arch[] = "amd64";
 static char cpu_arch[] = "arm";
 #elif defined(PPC32)
 static char cpu_arch[] = "ppc";
+#elif defined(PPC64)
+static char cpu_arch[] = "ppc64";
 #elif defined(SPARC)
   #ifdef _LP64
 static char cpu_arch[] = "sparcv9";
   #else
 static char cpu_arch[] = "sparc";
   #endif
+#elif defined(AARCH64)
+static char cpu_arch[] = "aarch64";
 #else
   #error Add appropriate cpu_arch setting
 #endif
@@ -253,7 +297,18 @@ void os::Bsd::initialize_system_info() {
   int mib[2];
   size_t len;
   int cpu_val;
-  julong mem_val;
+#if defined (HW_MEMSIZE) // Apple
+  uint64_t mem_val;
+  #define MEMMIB HW_MEMSIZE;
+#elif defined(HW_PHYSMEM64) // OpenBSD & NetBSD
+  int64_t mem_val;
+  #define MEMMIB HW_PHYSMEM64;
+#elif defined(HW_PHYSMEM) // FreeBSD
+  unsigned long mem_val;
+  #define MEMMIB HW_PHYSMEM;
+#else
+  #error No ways to get physmem
+#endif
 
   // get processors count via hw.ncpus sysctl
   mib[0] = CTL_HW;
@@ -266,19 +321,9 @@ void os::Bsd::initialize_system_info() {
     set_processor_count(1);   // fallback
   }
 
-  // get physical memory via hw.memsize sysctl (hw.memsize is used
-  // since it returns a 64 bit value)
+  // get physical memory via sysctl
   mib[0] = CTL_HW;
-
-#if defined (HW_MEMSIZE) // Apple
-  mib[1] = HW_MEMSIZE;
-#elif defined(HW_PHYSMEM) // Most of BSD
-  mib[1] = HW_PHYSMEM;
-#elif defined(HW_REALMEM) // Old FreeBSD
-  mib[1] = HW_REALMEM;
-#else
-  #error No ways to get physmem
-#endif
+  mib[1] = MEMMIB;
 
   len = sizeof(mem_val);
   if (sysctl(mib, 2, &mem_val, &len, NULL, 0) != -1) {
@@ -347,7 +392,13 @@ void os::init_system_properties_values() {
   //        ...
   //        7: The default directories, normally /lib and /usr/lib.
 #ifndef DEFAULT_LIBPATH
+#ifdef __APPLE__
   #define DEFAULT_LIBPATH "/lib:/usr/lib"
+#elif defined(__NetBSD__)
+  #define DEFAULT_LIBPATH "/usr/lib:/usr/pkg/lib"
+#else
+  #define DEFAULT_LIBPATH "/usr/lib:/usr/local/lib"
+#endif
 #endif
 
 // Base path of extensions installed on the system.
@@ -371,7 +422,10 @@ void os::init_system_properties_values() {
 
     // Found the full path to libjvm.so.
     // Now cut the path to <java_home>/jre if we can.
-    *(strrchr(buf, '/')) = '\0'; // Get rid of /libjvm.so.
+    pslash = strrchr(buf, '/');
+    if (pslash != NULL) {
+      *pslash = '\0';            // Get rid of /libjvm.so.
+    }
     pslash = strrchr(buf, '/');
     if (pslash != NULL) {
       *pslash = '\0';            // Get rid of /{client|server|hotspot}.
@@ -381,11 +435,7 @@ void os::init_system_properties_values() {
     if (pslash != NULL) {
       pslash = strrchr(buf, '/');
       if (pslash != NULL) {
-        *pslash = '\0';          // Get rid of /<arch>.
-        pslash = strrchr(buf, '/');
-        if (pslash != NULL) {
-          *pslash = '\0';        // Get rid of /lib.
-        }
+        *pslash = '\0';        // Get rid of /lib.
       }
     }
     Arguments::set_java_home(buf);
@@ -412,9 +462,10 @@ void os::init_system_properties_values() {
     // That's +1 for the colon and +1 for the trailing '\0'.
     char *ld_library_path = (char *)NEW_C_HEAP_ARRAY(char,
                                                      strlen(v) + 1 +
-                                                     sizeof(SYS_EXT_DIR) + sizeof("/lib/") + strlen(cpu_arch) + sizeof(DEFAULT_LIBPATH) + 1,
+                                                     sizeof(DEFAULT_LIBPATH) + 1,
                                                      mtInternal);
-    sprintf(ld_library_path, "%s%s" SYS_EXT_DIR "/lib/%s:" DEFAULT_LIBPATH, v, v_colon, cpu_arch);
+    sprintf(ld_library_path, "%s%s" DEFAULT_LIBPATH, v, v_colon);
+
     Arguments::set_library_path(ld_library_path);
     FREE_C_HEAP_ARRAY(char, ld_library_path);
   }
@@ -571,6 +622,9 @@ void os::Bsd::signal_sets_init() {
   sigaddset(&unblocked_sigs, SIGSEGV);
   sigaddset(&unblocked_sigs, SIGBUS);
   sigaddset(&unblocked_sigs, SIGFPE);
+#if defined(PPC64)
+  sigaddset(&unblocked_sigs, SIGTRAP);
+#endif
   sigaddset(&unblocked_sigs, SR_signum);
 
   if (!ReduceSignalUsage) {
@@ -906,6 +960,13 @@ bool os::enable_vtime()   { return false; }
 bool os::vtime_enabled()  { return false; }
 
 double os::elapsedVTime() {
+#ifdef RUSAGE_THREAD
+  struct rusage usage;
+  int retval = getrusage(RUSAGE_THREAD, &usage);
+  if (retval == 0) {
+    return (double) (usage.ru_utime.tv_sec + usage.ru_stime.tv_sec) + (double) (usage.ru_utime.tv_usec + usage.ru_stime.tv_usec) / (1000 * 1000);
+  }
+#endif
   // better than nothing, but not much
   return elapsedTime();
 }
@@ -939,11 +1000,15 @@ void os::Bsd::clock_init() {
 void os::Bsd::clock_init() {
   struct timespec res;
   struct timespec tp;
+  _getcpuclockid = (int (*)(pthread_t, clockid_t *))dlsym(RTLD_DEFAULT, "pthread_getcpuclockid");
   if (::clock_getres(CLOCK_MONOTONIC, &res) == 0 &&
       ::clock_gettime(CLOCK_MONOTONIC, &tp)  == 0) {
     // yes, monotonic clock is supported
     _clock_gettime = ::clock_gettime;
+    return;
   }
+  warning("No monotonic clock was available - timed services may " \
+          "be adversely affected if the time-of-day clock changes");
 }
 #endif
 
@@ -1135,28 +1200,25 @@ pid_t os::Bsd::gettid() {
   guarantee(retval != 0, "just checking");
   return retval;
 
-#else
-  #ifdef __FreeBSD__
-  retval = syscall(SYS_thr_self);
-  #else
-    #ifdef __OpenBSD__
-  retval = syscall(SYS_getthrid);
-    #else
-      #ifdef __NetBSD__
-  retval = (pid_t) syscall(SYS__lwp_self);
-      #endif
-    #endif
-  #endif
+#elif defined(__FreeBSD__)
+  return ::pthread_getthreadid_np();
+#elif defined(__OpenBSD__)
+  retval = getthrid();
+#elif defined(__NetBSD__)
+  retval = (pid_t) _lwp_self();
 #endif
 
   if (retval == -1) {
     return getpid();
   }
+  return retval;
 }
 
 intx os::current_thread_id() {
 #ifdef __APPLE__
   return (intx)::pthread_mach_thread_np(::pthread_self());
+#elif defined(__FreeBSD__)
+  return os::Bsd::gettid();
 #else
   return (intx)::pthread_self();
 #endif
@@ -1333,6 +1395,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
   return os::get_default_process_handle();
 #else
   log_info(os)("attempting shared library load of %s", filename);
+
   void * result= ::dlopen(filename, RTLD_LAZY);
   if (result != NULL) {
     Events::log(NULL, "Loaded shared library %s", filename);
@@ -1343,7 +1406,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
 
   Elf32_Ehdr elf_head;
 
-  const char* const error_report = ::dlerror();
+  const char* error_report = ::dlerror();
   if (error_report == NULL) {
     error_report = "dlerror returned no error description";
   }
@@ -1413,6 +1476,10 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
     #define EM_X86_64       62              /* AMD x86-64 */
   #endif
 
+  #ifndef EM_AARCH64
+    #define EM_AARCH64     183              /* ARM AARCH64 */
+  #endif
+
   static const arch_t arch_array[]={
     {EM_386,         EM_386,     ELFCLASS32, ELFDATA2LSB, (char*)"IA 32"},
     {EM_486,         EM_386,     ELFCLASS32, ELFDATA2LSB, (char*)"IA 32"},
@@ -1423,7 +1490,8 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
     {EM_SPARCV9,     EM_SPARCV9, ELFCLASS64, ELFDATA2MSB, (char*)"Sparc v9 64"},
     {EM_PPC,         EM_PPC,     ELFCLASS32, ELFDATA2MSB, (char*)"Power PC 32"},
     {EM_PPC64,       EM_PPC64,   ELFCLASS64, ELFDATA2MSB, (char*)"Power PC 64"},
-    {EM_ARM,         EM_ARM,     ELFCLASS32,   ELFDATA2LSB, (char*)"ARM"},
+    {EM_ARM,         EM_ARM,     ELFCLASS32, ELFDATA2LSB, (char*)"ARM"},
+    {EM_AARCH64,     EM_AARCH64, ELFCLASS64, ELFDATA2LSB, (char*)"AARCH64"},
     {EM_S390,        EM_S390,    ELFCLASSNONE, ELFDATA2MSB, (char*)"IBM System/390"},
     {EM_ALPHA,       EM_ALPHA,   ELFCLASS64, ELFDATA2LSB, (char*)"Alpha"},
     {EM_MIPS_RS3_LE, EM_MIPS_RS3_LE, ELFCLASS32, ELFDATA2LSB, (char*)"MIPSel"},
@@ -1446,6 +1514,8 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
   static  Elf32_Half running_arch_code=EM_PPC64;
   #elif  (defined __powerpc__)
   static  Elf32_Half running_arch_code=EM_PPC;
+  #elif  (defined AARCH64)
+  static  Elf32_Half running_arch_code=EM_AARCH64;
   #elif  (defined ARM)
   static  Elf32_Half running_arch_code=EM_ARM;
   #elif  (defined S390)
@@ -1462,7 +1532,7 @@ void * os::dll_load(const char *filename, char *ebuf, int ebuflen) {
   static  Elf32_Half running_arch_code=EM_68K;
   #else
     #error Method os::dll_load requires that one of following is defined:\
-         IA32, AMD64, IA64, __sparc, __powerpc__, ARM, S390, ALPHA, MIPS, MIPSEL, PARISC, M68K
+         IA32, AMD64, IA64, __sparc, __powerpc__, ARM, AARCH64, S390, ALPHA, MIPS, MIPSEL, PARISC, M68K
   #endif
 
   // Identify compatability class for VM's architecture and library's architecture
@@ -1548,6 +1618,22 @@ void os::print_dll_info(outputStream *st) {
   }
 }
 
+#if defined(__OpenBSD__)
+struct iterate_data {
+  os::LoadedModulesCallbackFunc callback;
+  void *param;
+};
+
+static int iter_callback(struct dl_phdr_info *info, size_t size, void* d) {
+  struct iterate_data *data = (struct iterate_data *)d;
+
+  if(data->callback(info->dlpi_name, (address)info->dlpi_addr, (address)0, data->param))
+    return 1;
+
+  return 0;
+}
+#endif
+
 int os::get_loaded_modules_info(os::LoadedModulesCallbackFunc callback, void *param) {
 #ifdef RTLD_DI_LINKMAP
   Dl_info dli;
@@ -1582,6 +1668,7 @@ int os::get_loaded_modules_info(os::LoadedModulesCallbackFunc callback, void *pa
   }
 
   dlclose(handle);
+  return 0;
 #elif defined(__APPLE__)
   for (uint32_t i = 1; i < _dyld_image_count(); i++) {
     // Value for top_address is returned as 0 since we don't have any information about module size
@@ -1590,6 +1677,10 @@ int os::get_loaded_modules_info(os::LoadedModulesCallbackFunc callback, void *pa
     }
   }
   return 0;
+#elif defined(__OpenBSD__)
+  struct iterate_data data = { callback, param };
+
+  return dl_iterate_phdr(iter_callback, &data);
 #else
   return 1;
 #endif
@@ -1604,7 +1695,7 @@ void os::get_summary_os_info(char* buf, size_t buflen) {
   if (sysctl(mib_kern, 2, os, &size, NULL, 0) < 0) {
 #ifdef __APPLE__
       strncpy(os, "Darwin", sizeof(os));
-#elif __OpenBSD__
+#elif defined(__OpenBSD__)
       strncpy(os, "OpenBSD", sizeof(os));
 #else
       strncpy(os, "BSD", sizeof(os));
@@ -1640,18 +1731,25 @@ void os::print_os_info(outputStream* st) {
 }
 
 void os::pd_print_cpu_info(outputStream* st, char* buf, size_t buflen) {
-  // Nothing to do for now.
+  size_t size = buflen;
+  int mib[] = { CTL_HW, HW_MODEL };
+  if (sysctl(mib, 2, buf, &size, NULL, 0) == 0) {
+    st->print("CPU Model: %s\n", buf);
+  }
 }
 
 void os::get_summary_cpu_info(char* buf, size_t buflen) {
+  size_t size;
+#ifdef __APPLE__
   unsigned int mhz;
-  size_t size = sizeof(mhz);
+  size = sizeof(mhz);
   int mib[] = { CTL_HW, HW_CPU_FREQ };
   if (sysctl(mib, 2, &mhz, &size, NULL, 0) < 0) {
     mhz = 1;  // looks like an error but can be divided by
   } else {
     mhz /= 1000000;  // reported in millions
   }
+#endif
 
   char model[100];
   size = sizeof(model);
@@ -1667,13 +1765,37 @@ void os::get_summary_cpu_info(char* buf, size_t buflen) {
       strncpy(machine, "", sizeof(machine));
   }
 
+#ifdef __APPLE__
   snprintf(buf, buflen, "%s %s %d MHz", model, machine, mhz);
+#else
+  snprintf(buf, buflen, "%s %s", model, machine);
+#endif
 }
 
-void os::print_memory_info(outputStream* st) {
-  xsw_usage swap_usage;
-  size_t size = sizeof(swap_usage);
+#ifdef __FreeBSD__
+static void get_swap_info(int *total_pages, int *used_pages) {
+  struct xswdev xsw;
+  size_t mibsize, size;
+  int mib[16];
+  int n, total = 0, used = 0;
 
+  mibsize = sizeof(mib) / sizeof(mib[0]);
+  if (sysctlnametomib("vm.swap_info", mib, &mibsize) != -1) {
+    for (n = 0; ; n++) {
+      mib[mibsize] = n;
+      size = sizeof(xsw);
+      if (sysctl(mib, mibsize + 1, &xsw, &size, NULL, 0) == -1)
+        break;
+      total += xsw.xsw_nblks;
+      used += xsw.xsw_used;
+    }
+  }
+  *total_pages = total;
+  *used_pages = used;
+}
+#endif
+
+void os::print_memory_info(outputStream* st) {
   st->print("Memory:");
   st->print(" %dk page", os::vm_page_size()>>10);
 
@@ -1681,6 +1803,16 @@ void os::print_memory_info(outputStream* st) {
             os::physical_memory() >> 10);
   st->print("(" UINT64_FORMAT "k free)",
             os::available_memory() >> 10);
+#ifdef __FreeBSD__
+  int total, used;
+  get_swap_info(&total, &used);
+  st->print(", swap " UINT64_FORMAT "k",
+            (((uint64_t) total) * ((uint64_t) os::vm_page_size())) >> 10);
+  st->print("(" UINT64_FORMAT "k free)",
+            (((uint64_t) (total - used)) * ((uint64_t) os::vm_page_size())) >> 10);
+#elif defined(__APPLE__)
+  xsw_usage swap_usage;
+  size_t size = sizeof(swap_usage);
 
   if((sysctlbyname("vm.swapusage", &swap_usage, &size, NULL, 0) == 0) || (errno == ENOMEM)) {
     if (size >= offset_of(xsw_usage, xsu_used)) {
@@ -1690,6 +1822,7 @@ void os::print_memory_info(outputStream* st) {
                 ((julong) swap_usage.xsu_avail) >> 10);
     }
   }
+#endif
 
   st->cr();
 }
@@ -1849,6 +1982,89 @@ void* os::user_handler() {
   return CAST_FROM_FN_PTR(void*, UserHandler);
 }
 
+#ifdef __APPLE__
+#define create_semaphore_timespec(sec, nsec) sec, nsec
+#else
+#define MAX_SECS 100000000
+
+// This code is common to linux and solaris and will be moved to a
+// common place in dolphin.
+//
+// The passed in time value is either a relative time in nanoseconds
+// or an absolute time in milliseconds. Either way it has to be unpacked
+// into suitable seconds and nanoseconds components and stored in the
+// given timespec structure.
+// Given time is a 64-bit value and the time_t used in the timespec is only
+// a signed-32-bit value (except on 64-bit Linux) we have to watch for
+// overflow if times way in the future are given. Further on Solaris versions
+// prior to 10 there is a restriction (see cond_timedwait) that the specified
+// number of seconds, in abstime, is less than current_time  + 100,000,000.
+// As it will be 28 years before "now + 100000000" will overflow we can
+// ignore overflow and just impose a hard-limit on seconds using the value
+// of "now + 100,000,000". This places a limit on the timeout of about 3.17
+// years from "now".
+//
+static void unpackTime(timespec* absTime, bool isAbsolute, jlong time) {
+  assert(time > 0, "convertTime");
+
+  struct timeval now;
+  int status = gettimeofday(&now, NULL);
+  assert(status == 0, "gettimeofday");
+
+  time_t max_secs = now.tv_sec + MAX_SECS;
+
+  if (isAbsolute) {
+    jlong secs = time / 1000;
+    if (secs > max_secs) {
+      absTime->tv_sec = max_secs;
+    } else {
+      absTime->tv_sec = secs;
+    }
+    absTime->tv_nsec = (time % 1000) * NANOSECS_PER_MILLISEC;
+  } else {
+    jlong secs = time / NANOSECS_PER_SEC;
+    if (secs >= MAX_SECS) {
+      absTime->tv_sec = max_secs;
+      absTime->tv_nsec = 0;
+    } else {
+      absTime->tv_sec = now.tv_sec + secs;
+      absTime->tv_nsec = (time % NANOSECS_PER_SEC) + now.tv_usec*1000;
+      if (absTime->tv_nsec >= NANOSECS_PER_SEC) {
+        absTime->tv_nsec -= NANOSECS_PER_SEC;
+        ++absTime->tv_sec; // note: this must be <= max_secs
+      }
+    }
+  }
+  assert(absTime->tv_sec >= 0, "tv_sec < 0");
+  assert(absTime->tv_sec <= max_secs, "tv_sec > max_secs");
+  assert(absTime->tv_nsec >= 0, "tv_nsec < 0");
+  assert(absTime->tv_nsec < NANOSECS_PER_SEC, "tv_nsec >= nanos_per_sec");
+}
+
+static struct timespec create_semaphore_timespec(unsigned int sec, int nsec) {
+  struct timespec ts;
+
+  if (os::supports_monotonic_clock()) {
+    ::clock_gettime(CLOCK_REALTIME, &ts);
+    // see os_posix.cpp for discussion on overflow checking
+    if (sec >= MAX_SECS) {
+      ts.tv_sec += MAX_SECS;
+      ts.tv_nsec = 0;
+    } else {
+      ts.tv_sec += sec;
+      ts.tv_nsec += nsec;
+      if (ts.tv_nsec >= NANOSECS_PER_SEC) {
+        ts.tv_nsec -= NANOSECS_PER_SEC;
+        ++ts.tv_sec; // note: this must be <= max_secs
+      }
+    }
+  } else {
+    unpackTime(&ts, false, (sec * NANOSECS_PER_SEC) + nsec);
+  }
+  return ts;
+}
+#endif
+
 extern "C" {
   typedef void (*sa_handler_t)(int);
   typedef void (*sa_sigaction_t)(int, siginfo_t *, void *);
@@ -2005,19 +2221,11 @@ static void warn_fail_commit_memory(char* addr, size_t size, bool exec,
 //       problem.
 bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
-#ifdef __OpenBSD__
-  // XXX: Work-around mmap/MAP_FIXED bug temporarily on OpenBSD
-  Events::log(NULL, "Protecting memory [" INTPTR_FORMAT "," INTPTR_FORMAT "] with protection modes %x", p2i(addr), p2i(addr+size), prot);
-  if (::mprotect(addr, size, prot) == 0) {
-    return true;
-  }
-#else
   uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
                                      MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
   if (res != (uintptr_t) MAP_FAILED) {
     return true;
   }
-#endif
 
   // Warn about any commit errors we see in non-product builds just
   // in case mmap() doesn't work as described on the man page.
@@ -2090,15 +2298,9 @@ char *os::scan_pages(char *start, char* end, page_info* page_expected, page_info
 
 
 bool os::pd_uncommit_memory(char* addr, size_t size) {
-#ifdef __OpenBSD__
-  // XXX: Work-around mmap/MAP_FIXED bug temporarily on OpenBSD
-  Events::log(NULL, "Protecting memory [" INTPTR_FORMAT "," INTPTR_FORMAT "] with PROT_NONE", p2i(addr), p2i(addr+size));
-  return ::mprotect(addr, size, PROT_NONE) == 0;
-#else
   uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
                                      MAP_PRIVATE|MAP_FIXED|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   return res  != (uintptr_t) MAP_FAILED;
-#endif
 }
 
 bool os::pd_create_stack_guard_pages(char* addr, size_t size) {
@@ -2349,14 +2551,14 @@ char* os::pd_attempt_reserve_memory_at(size_t bytes, char* requested_addr) {
       // Does this overlap the block we wanted? Give back the overlapped
       // parts and try again.
 
-      size_t top_overlap = requested_addr + (bytes + gap) - base[i];
-      if (top_overlap >= 0 && top_overlap < bytes) {
+      ptrdiff_t top_overlap = requested_addr + (bytes + gap) - base[i];
+      if (top_overlap >= 0 && (size_t)top_overlap < bytes) {
         unmap_memory(base[i], top_overlap);
         base[i] += top_overlap;
         size[i] = bytes - top_overlap;
       } else {
-        size_t bottom_overlap = base[i] + bytes - requested_addr;
-        if (bottom_overlap >= 0 && bottom_overlap < bytes) {
+        ptrdiff_t bottom_overlap = base[i] + bytes - requested_addr;
+        if (bottom_overlap >= 0 && (size_t)bottom_overlap < bytes) {
           unmap_memory(requested_addr, bottom_overlap);
           size[i] = bytes - bottom_overlap;
         } else {
@@ -2485,13 +2687,6 @@ static int prio_init() {
 OSReturn os::set_native_priority(Thread* thread, int newpri) {
   if (!UseThreadPriorities || ThreadPriorityPolicy == 0) return OS_OK;
 
-#ifdef __OpenBSD__
-  // OpenBSD pthread_setprio starves low priority threads
-  return OS_OK;
-#elif defined(__FreeBSD__)
-  int ret = pthread_setprio(thread->osthread()->pthread_id(), newpri);
-  return (ret == 0) ? OS_OK : OS_ERR;
-#elif defined(__APPLE__) || defined(__NetBSD__)
   struct sched_param sp;
   int policy;
 
@@ -2505,10 +2700,6 @@ OSReturn os::set_native_priority(Thread* thread, int newpri) {
   }
 
   return OS_OK;
-#else
-  int ret = setpriority(PRIO_PROCESS, thread->osthread()->thread_id(), newpri);
-  return (ret == 0) ? OS_OK : OS_ERR;
-#endif
 }
 
 OSReturn os::get_native_priority(const Thread* const thread, int *priority_ptr) {
@@ -2518,9 +2709,6 @@ OSReturn os::get_native_priority(const Thread* const thread, int *priority_ptr) 
   }
 
   errno = 0;
-#if defined(__OpenBSD__) || defined(__FreeBSD__)
-  *priority_ptr = pthread_getprio(thread->osthread()->pthread_id());
-#elif defined(__APPLE__) || defined(__NetBSD__)
   int policy;
   struct sched_param sp;
 
@@ -2532,9 +2720,6 @@ OSReturn os::get_native_priority(const Thread* const thread, int *priority_ptr) 
     *priority_ptr = sp.sched_priority;
     return OS_OK;
   }
-#else
-  *priority_ptr = getpriority(PRIO_PROCESS, thread->osthread()->thread_id());
-#endif
   return (*priority_ptr != -1 || errno == 0 ? OS_OK : OS_ERR);
 }
 
@@ -2741,7 +2926,7 @@ static bool do_suspend(OSThread* osthread) {
 
   // managed to send the signal and switch to SUSPEND_REQUEST, now wait for SUSPENDED
   while (true) {
-    if (sr_semaphore.timedwait(0, 2 * NANOSECS_PER_MILLISEC)) {
+    if (sr_semaphore.timedwait(create_semaphore_timespec(0, 2 * NANOSECS_PER_MILLISEC))) {
       break;
     } else {
       // timeout
@@ -2775,7 +2960,7 @@ static void do_resume(OSThread* osthread) {
 
   while (true) {
     if (sr_notify(osthread) == 0) {
-      if (sr_semaphore.timedwait(0, 2 * NANOSECS_PER_MILLISEC)) {
+      if (sr_semaphore.timedwait(create_semaphore_timespec(0, 2 * NANOSECS_PER_MILLISEC))) {
         if (osthread->sr.is_running()) {
           return;
         }
@@ -3015,6 +3200,9 @@ void os::Bsd::install_signal_handlers() {
     set_signal_handler(SIGBUS, true);
     set_signal_handler(SIGILL, true);
     set_signal_handler(SIGFPE, true);
+#if defined(PPC64)
+    set_signal_handler(SIGTRAP, true);
+#endif
     set_signal_handler(SIGXFSZ, true);
 
 #if defined(__APPLE__)
@@ -3073,11 +3261,16 @@ void os::Bsd::install_signal_handlers() {
 #ifdef SIGNIFICANT_SIGNAL_MASK
   #undef SIGNIFICANT_SIGNAL_MASK
 #endif
+
+#ifdef __APPLE__
 #define SIGNIFICANT_SIGNAL_MASK (~0x04000000)
+#else
+#define SIGNIFICANT_SIGNAL_MASK (~0x00000000)
+#endif
 
 static const char* get_signal_handler_name(address handler,
                                            char* buf, int buflen) {
-  int offset;
+  int offset = 0;
   bool found = os::dll_address_to_library_name(handler, buf, buflen, &offset);
   if (found) {
     // skip directory names
@@ -3167,6 +3360,9 @@ void os::run_periodic_checks() {
   DO_SIGNAL_CHECK(SIGBUS);
   DO_SIGNAL_CHECK(SIGPIPE);
   DO_SIGNAL_CHECK(SIGXFSZ);
+#if defined(PPC64)
+  DO_SIGNAL_CHECK(SIGTRAP);
+#endif
 
 
   // ReduceSignalUsage allows the user to override these handlers
@@ -3193,7 +3389,11 @@ void os::Bsd::check_signal_handler(int sig) {
   struct sigaction act;
   if (os_sigaction == NULL) {
     // only trust the default sigaction, in case it has been interposed
+#if defined(__NetBSD__)
+    os_sigaction = (os_sigaction_t)dlsym(RTLD_DEFAULT, "__sigaction14");
+#else
     os_sigaction = (os_sigaction_t)dlsym(RTLD_DEFAULT, "sigaction");
+#endif
     if (os_sigaction == NULL) return;
   }
 
@@ -3420,19 +3620,37 @@ int os::active_processor_count() {
     return ActiveProcessorCount;
   }
 
+#ifdef __FreeBSD__
+  int online_cpus = 0;
+  cpuset_t mask;
+  if (cpuset_getaffinity(CPU_LEVEL_WHICH, CPU_WHICH_PID, -1, sizeof(mask),
+      &mask) == 0)
+    for (u_int i = 0; i < sizeof(mask) / sizeof(long); i++)
+      online_cpus += __builtin_popcountl(((long *)&mask)[i]);
+  if (online_cpus > 0 && online_cpus <= _processor_count)
+    return online_cpus;
+  online_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+  if (online_cpus >= 1)
+    return online_cpus;
+#endif
+
   return _processor_count;
 }
 
 void os::set_native_thread_name(const char *name) {
-#if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_5
-  // This is only supported in Snow Leopard and beyond
   if (name != NULL) {
+#if defined(__APPLE__) && MAC_OS_X_VERSION_MIN_REQUIRED > MAC_OS_X_VERSION_10_5
+    // This is only supported in Snow Leopard and beyond
     // Add a "Java: " prefix to the name
     char buf[MAXTHREADNAMESIZE];
     snprintf(buf, sizeof(buf), "Java: %s", name);
     pthread_setname_np(buf);
-  }
+#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+    pthread_set_name_np(pthread_self(), name);
+#elif defined(__NetBSD__)
+    pthread_setname_np(pthread_self(), "%s", const_cast<char *>(name));
 #endif
+  }
 }
 
 bool os::distribute_processes(uint length, uint* distribution) {
@@ -3738,30 +3956,15 @@ bool os::pd_unmap_memory(char* addr, size_t bytes) {
 // the fast estimate available on the platform.
 
 jlong os::current_thread_cpu_time() {
-#ifdef __APPLE__
   return os::thread_cpu_time(Thread::current(), true /* user + sys */);
-#else
-  Unimplemented();
-  return 0;
-#endif
 }
 
 jlong os::thread_cpu_time(Thread* thread) {
-#ifdef __APPLE__
   return os::thread_cpu_time(thread, true /* user + sys */);
-#else
-  Unimplemented();
-  return 0;
-#endif
 }
 
 jlong os::current_thread_cpu_time(bool user_sys_cpu_time) {
-#ifdef __APPLE__
   return os::thread_cpu_time(Thread::current(), user_sys_cpu_time);
-#else
-  Unimplemented();
-  return 0;
-#endif
 }
 
 jlong os::thread_cpu_time(Thread *thread, bool user_sys_cpu_time) {
@@ -3786,8 +3989,81 @@ jlong os::thread_cpu_time(Thread *thread, bool user_sys_cpu_time) {
     return ((jlong)tinfo.user_time.seconds * 1000000000) + ((jlong)tinfo.user_time.microseconds * (jlong)1000);
   }
 #else
-  Unimplemented();
-  return 0;
+#if defined(__OpenBSD__)
+  size_t length = 0;
+  pid_t pid = getpid();
+  struct kinfo_proc *ki;
+
+  int mib[] = { CTL_KERN, KERN_PROC, KERN_PROC_PID|KERN_PROC_SHOW_THREADS, pid, sizeof(struct kinfo_proc), 0 };
+  const u_int miblen = sizeof(mib) / sizeof(mib[0]);
+
+  if (sysctl(mib, miblen, NULL, &length, NULL, 0) < 0) {
+    return -1;
+  }
+
+  size_t num_threads = length / sizeof(*ki);
+  ki = NEW_C_HEAP_ARRAY(struct kinfo_proc, num_threads, mtInternal);
+
+  mib[5] = num_threads;
+
+  if (sysctl(mib, miblen, ki, &length, NULL, 0) < 0) {
+    FREE_C_HEAP_ARRAY(struct kinfo_proc, ki);
+    return -1;
+  }
+
+  num_threads = length / sizeof(*ki);
+
+  for (size_t i = 0; i < num_threads; i++) {
+    if (ki[i].p_tid == thread->osthread()->thread_id()) {
+      jlong nanos = (jlong)ki[i].p_uutime_sec * NANOSECS_PER_SEC;
+      nanos += (jlong)ki[i].p_uutime_usec * 1000;
+      if (user_sys_cpu_time) {
+        nanos += (jlong)ki[i].p_ustime_sec * NANOSECS_PER_SEC;
+        nanos += (jlong)ki[i].p_ustime_usec * 1000;
+      }
+      FREE_C_HEAP_ARRAY(struct kinfo_proc, ki);
+      return nanos;
+    }
+  }
+  FREE_C_HEAP_ARRAY(struct kinfo_proc, ki);
+  return -1;
+#else /* !OpenBSD */
+  if (user_sys_cpu_time && Bsd::_getcpuclockid != NULL) {
+    struct timespec tp;
+    clockid_t clockid;
+    int ret;
+
+    /*
+     * XXX This is essentially a copy of the Linux implementation,
+     *     but with fewer indirections.
+     */
+    ret = Bsd::_getcpuclockid(thread->osthread()->pthread_id(), &clockid);
+    if (ret != 0)
+      return -1;
+    /* NB: _clock_gettime only needs to be valid for CLOCK_MONOTONIC. */
+    ret = ::clock_gettime(clockid, &tp);
+    if (ret != 0)
+      return -1;
+    return (tp.tv_sec * NANOSECS_PER_SEC) + tp.tv_nsec;
+  }
+#ifdef RUSAGE_THREAD
+  if (thread == Thread::current()) {
+    struct rusage usage;
+    jlong nanos;
+
+    if (getrusage(RUSAGE_THREAD, &usage) != 0)
+      return -1;
+    nanos = (jlong)usage.ru_utime.tv_sec * NANOSECS_PER_SEC;
+    nanos += (jlong)usage.ru_utime.tv_usec * 1000;
+    if (user_sys_cpu_time) {
+      nanos += (jlong)usage.ru_stime.tv_sec * NANOSECS_PER_SEC;
+      nanos += (jlong)usage.ru_stime.tv_usec * 1000;
+    }
+    return nanos;
+  }
+#endif
+  return -1;
+#endif
 #endif
 }
 
@@ -3807,10 +4083,10 @@ void os::thread_cpu_time_info(jvmtiTimerInfo *info_ptr) {
 }
 
 bool os::is_thread_cpu_time_supported() {
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(__OpenBSD__)
   return true;
 #else
-  return false;
+  return (Bsd::_getcpuclockid != NULL);
 #endif
 }
 
@@ -3919,8 +4195,8 @@ int os::fork_and_exec(char* cmd, bool use_vfork_if_available) {
 // Get the kern.corefile setting, or otherwise the default path to the core file
 // Returns the length of the string
 int os::get_core_path(char* buffer, size_t bufferSize) {
-  int n = 0;
 #ifdef __APPLE__
+  int n = 0;
   char coreinfo[MAX_PATH];
   size_t sz = sizeof(coreinfo);
   int ret = sysctlbyname("kern.corefile", coreinfo, &sz, NULL, 0);
@@ -3936,7 +4212,6 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
       n = jio_snprintf(buffer, bufferSize, "%s", coreinfo);
     }
   } else
-#endif
   {
     n = jio_snprintf(buffer, bufferSize, "/cores/core.%d", os::current_process_id());
   }
@@ -3944,6 +4219,26 @@ int os::get_core_path(char* buffer, size_t bufferSize) {
   n = MIN2(n, (int)bufferSize);
 
   return n;
+#else
+  const char *p = get_current_directory(buffer, bufferSize);
+
+  if (p == NULL) {
+    assert(p != NULL, "failed to get current directory");
+    return 0;
+  }
+
+  const char *q = getprogname();
+
+  if (q == NULL) {
+    assert(q != NULL, "failed to get progname");
+    return 0;
+  }
+
+  const int n = strlen(buffer);
+
+  jio_snprintf(buffer + n, bufferSize - n, "/%s.core", q);
+  return strlen(buffer);
+#endif
 }
 
 #ifndef PRODUCT
@@ -3976,4 +4271,112 @@ bool os::start_debugging(char *buf, int buflen) {
     yes = false;
   }
   return yes;
+}
+
+// Java thread:
+//
+//   Low memory addresses
+//    +------------------------+
+//    |                        |\  Java thread created by VM does not have
+//    |   pthread guard page   | - pthread guard, attached Java thread usually
+//    |                        |/  has 1 pthread guard page.
+// P1 +------------------------+ Thread::stack_base() - Thread::stack_size()
+//    |                        |\
+//    |  HotSpot Guard Pages   | - red, yellow and reserved pages
+//    |                        |/
+//    +------------------------+ JavaThread::stack_reserved_zone_base()
+//    |                        |\
+//    |      Normal Stack      | -
+//    |                        |/
+// P2 +------------------------+ Thread::stack_base()
+//
+// Non-Java thread:
+//
+//   Low memory addresses
+//    +------------------------+
+//    |                        |\
+//    |   pthread guard page   | - usually 1 page
+//    |                        |/
+// P1 +------------------------+ Thread::stack_base() - Thread::stack_size()
+//    |                        |\
+//    |      Normal Stack      | -
+//    |                        |/
+// P2 +------------------------+ Thread::stack_base()
+//
+// ** P1 (aka bottom) and size ( P2 = P1 - size) are the address and stack size returned from
+//    pthread_attr_getstack()
+
+static void current_stack_region(address * bottom, size_t * size) {
+#ifdef __APPLE__
+  pthread_t self = pthread_self();
+  void *stacktop = pthread_get_stackaddr_np(self);
+  *size = pthread_get_stacksize_np(self);
+  // workaround for OS X 10.9.0 (Mavericks)
+  // pthread_get_stacksize_np returns 128 pages even though the actual size is 2048 pages
+  if (pthread_main_np() == 1) {
+    // At least on Mac OS 10.12 we have observed stack sizes not aligned
+    // to pages boundaries. This can be provoked by e.g. setrlimit() (ulimit -s xxxx in the
+    // shell). Apparently Mac OS actually rounds upwards to next multiple of page size,
+    // however, we round downwards here to be on the safe side.
+    *size = align_down(*size, getpagesize());
+
+    if ((*size) < (DEFAULT_MAIN_THREAD_STACK_PAGES * (size_t)getpagesize())) {
+      char kern_osrelease[256];
+      size_t kern_osrelease_size = sizeof(kern_osrelease);
+      int ret = sysctlbyname("kern.osrelease", kern_osrelease, &kern_osrelease_size, NULL, 0);
+      if (ret == 0) {
+        // get the major number, atoi will ignore the minor amd micro portions of the version string
+        if (atoi(kern_osrelease) >= OS_X_10_9_0_KERNEL_MAJOR_VERSION) {
+          *size = (DEFAULT_MAIN_THREAD_STACK_PAGES*getpagesize());
+        }
+      }
+    }
+  }
+  *bottom = (address) stacktop - *size;
+#elif defined(__OpenBSD__)
+  stack_t ss;
+  int rslt = pthread_stackseg_np(pthread_self(), &ss);
+
+  if (rslt != 0)
+    fatal("pthread_stackseg_np failed with error = %d", rslt);
+
+  *bottom = (address)((char *)ss.ss_sp - ss.ss_size);
+  *size   = ss.ss_size;
+#else
+  pthread_attr_t attr;
+
+  int rslt = pthread_attr_init(&attr);
+
+  // JVM needs to know exact stack location, abort if it fails
+  if (rslt != 0)
+    fatal("pthread_attr_init failed with error = %d", rslt);
+
+  rslt = pthread_attr_get_np(pthread_self(), &attr);
+
+  if (rslt != 0)
+    fatal("pthread_attr_get_np failed with error = %d", rslt);
+
+  if (pthread_attr_getstack(&attr, (void **)bottom, size) != 0) {
+    fatal("Can not locate current stack attributes!");
+  }
+
+  pthread_attr_destroy(&attr);
+#endif
+  assert(os::current_stack_pointer() >= *bottom &&
+         os::current_stack_pointer() < *bottom + *size, "just checking");
+}
+
+address os::current_stack_base() {
+  address bottom;
+  size_t size;
+  current_stack_region(&bottom, &size);
+  return (bottom + size);
+}
+
+size_t os::current_stack_size() {
+  // stack size includes normal stack and HotSpot guard pages
+  address bottom;
+  size_t size;
+  current_stack_region(&bottom, &size);
+  return size;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2013, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,15 +25,18 @@
 package sun.jvm.hotspot.debugger.bsd;
 
 import sun.jvm.hotspot.debugger.*;
+import sun.jvm.hotspot.utilities.PlatformInfo;
 
 class BsdThread implements ThreadProxy {
     private BsdDebugger debugger;
     private int         thread_id;
     private long        unique_thread_id;
+    private boolean     is_darwin;
 
     /** The address argument must be the address of the _thread_id in the
         OSThread. It's value is result ::gettid() call. */
     BsdThread(BsdDebugger debugger, Address threadIdAddr, Address uniqueThreadIdAddr) {
+        this.is_darwin = isDarwin();
         this.debugger = debugger;
         // FIXME: size of data fetched here should be configurable.
         // However, making it so would produce a dependency on the "types"
@@ -42,10 +45,26 @@ class BsdThread implements ThreadProxy {
         this.unique_thread_id = uniqueThreadIdAddr.getCIntegerAt(0, 8, true);
     }
 
+    BsdThread(BsdDebugger debugger, Address threadIdAddr) {
+        this.is_darwin = isDarwin();
+        if (is_darwin) {
+            throw new RuntimeException("Mac OS requires the unique thread id");
+        }
+        this.debugger = debugger;
+        // FIXME: size of data fetched here should be configurable.
+        // However, making it so would produce a dependency on the "types"
+        // package from the debugger package, which is not desired.
+        this.thread_id = (int) threadIdAddr.getCIntegerAt(0, 4, true);
+    }
+
     BsdThread(BsdDebugger debugger, long id) {
+        this.is_darwin = isDarwin();
         this.debugger = debugger;
         // use unique_thread_id to identify thread
         this.unique_thread_id = id;
+        if (!is_darwin) {
+            this.thread_id = (int) id;
+        }
     }
 
     public boolean equals(Object obj) {
@@ -53,19 +72,24 @@ class BsdThread implements ThreadProxy {
             return false;
         }
 
-        return (((BsdThread) obj).unique_thread_id == unique_thread_id);
+        return is_darwin ? (((BsdThread) obj).unique_thread_id == unique_thread_id)
+                         : (((BsdThread) obj).thread_id == thread_id);
     }
 
     public int hashCode() {
-        return thread_id;
+        return is_darwin ? Long.hashCode(unique_thread_id) : thread_id;
     }
 
     public String toString() {
         return Integer.toString(thread_id);
     }
 
+    private static boolean isDarwin() {
+        return PlatformInfo.getOS().equals("darwin");
+    }
+
     public ThreadContext getContext() throws IllegalThreadStateException {
-        long[] data = debugger.getThreadIntegerRegisterSet(unique_thread_id);
+        long[] data = debugger.getThreadIntegerRegisterSet(isDarwin() ? unique_thread_id : thread_id);
         ThreadContext context = BsdThreadContextFactory.createThreadContext(debugger);
         for (int i = 0; i < data.length; i++) {
             context.setRegister(i, data[i]);

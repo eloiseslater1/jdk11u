@@ -2843,7 +2843,7 @@ void AdapterHandlerLibrary::create_native_wrapper(const methodHandle& method) {
     if (buf != NULL) {
       CodeBuffer buffer(buf);
       struct { double data[20]; } locs_buf;
-      buffer.insts()->initialize_shared_locs((relocInfo*)&locs_buf, sizeof(locs_buf) / sizeof(relocInfo));
+      buffer.insts()->initialize_shared_locs((relocInfo*)&locs_buf, (sizeof(locs_buf)) / (sizeof(relocInfo)));
       MacroAssembler _masm(&buffer);
 
       // Fill in the signature array, for the calling-convention call.

@@ -165,6 +165,8 @@ else
     OPENJDK_TARGET_OS := macosx
   else ifeq ($(UNAME_OS), SunOS)
     OPENJDK_TARGET_OS := solaris
+  else ifneq ($(findstring BSD,$(UNAME_OS),))
+    OPENJDK_TARGET_OS := bsd
   else
     OPENJDK_TARGET_OS := $(UNAME_OS)
   endif
@@ -229,6 +231,9 @@ ifeq ($(OPENJDK_TARGET_OS), linux)
 else ifeq ($(OPENJDK_TARGET_OS), macosx)
   NUM_CORES := $(shell /usr/sbin/sysctl -n hw.ncpu)
   MEMORY_SIZE := $(shell $(EXPR) `/usr/sbin/sysctl -n hw.memsize` / 1024 / 1024)
+else ifeq ($(OPENJDK_TARGET_OS), bsd)
+  NUM_CORES := $(shell /sbin/sysctl -n hw.ncpu)
+  MEMORY_SIZE := $(shell $(EXPR) `/sbin/sysctl -n hw.physmem` / 1024 / 1024)
 else ifeq ($(OPENJDK_TARGET_OS), solaris)
   NUM_CORES := $(shell LC_MESSAGES=C /usr/sbin/psrinfo -v | $(GREP) -c on-line)
   MEMORY_SIZE := $(shell \
@@ -268,6 +273,10 @@ ifneq ($(DEVKIT_HOME), )
   else ifeq ($(OPENJDK_TARGET_OS), solaris)
     # Prefer system linker for AOT on Solaris.
     LD_JAOTC := ld
+    LIBRARY_PREFIX := lib
+    SHARED_LIBRARY_SUFFIX := .so
+  else ifeq ($(OPENJDK_TARGET_OS), bsd)
+    LD_JAOTC := $(DEVKIT_HOME)/bin/ld
     LIBRARY_PREFIX := lib
     SHARED_LIBRARY_SUFFIX := .so
   endif

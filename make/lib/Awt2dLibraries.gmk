@@ -139,7 +139,7 @@ ifeq ($(OPENJDK_TARGET_OS), windows)
       #
 endif
 
-ifneq ($(filter $(OPENJDK_TARGET_OS), solaris linux macosx aix), )
+ifneq ($(filter $(OPENJDK_TARGET_OS), solaris linux macosx aix bsd), )
   LIBAWT_EXFILES += awt_Font.c CUPSfuncs.c fontpath.c X11Color.c
 endif
 
@@ -226,7 +226,8 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBAWT, \
     EXTRA_HEADER_DIRS := $(LIBAWT_EXTRA_HEADER_DIRS), \
     DISABLED_WARNINGS_gcc := sign-compare unused-result maybe-uninitialized \
         format-nonliteral parentheses, \
-    DISABLED_WARNINGS_clang := logical-op-parentheses extern-initializer, \
+    DISABLED_WARNINGS_clang := logical-op-parentheses extern-initializer \
+        format-nonliteral sign-compare, \
     DISABLED_WARNINGS_solstudio := E_DECLARATION_IN_CODE, \
     DISABLED_WARNINGS_microsoft := 4244 4267 4996, \
     ASFLAGS := $(LIBAWT_ASFLAGS), \
@@ -299,7 +300,7 @@ ifeq ($(findstring $(OPENJDK_TARGET_OS), windows macosx), )
       LIBAWT_XAWT_CFLAGS += -DFUNCPROTO=15
     endif
 
-    ifeq ($(OPENJDK_TARGET_OS), linux)
+    ifneq ($(filter $(OPENJDK_TARGET_OS), linux bsd), )
       ifeq ($(DISABLE_XRENDER), true)
         LIBAWT_XAWT_CFLAGS += -DDISABLE_XRENDER_BY_DEFAULT=true
       endif
@@ -309,6 +310,10 @@ ifeq ($(findstring $(OPENJDK_TARGET_OS), windows macosx), )
 
     ifeq ($(OPENJDK_TARGET_OS), linux)
       LIBAWT_XAWT_LIBS += -lpthread
+    endif
+
+    ifeq ($(OPENJDK_TARGET_OS), bsd)
+      LIBAWT_XAWT_LIBS += -pthread
     endif
 
     ifeq ($(TOOLCHAIN_TYPE), gcc)
@@ -335,6 +340,9 @@ ifeq ($(findstring $(OPENJDK_TARGET_OS), windows macosx), )
             unused-result maybe-uninitialized format \
             format-security int-to-pointer-cast parentheses \
             implicit-fallthrough, \
+        DISABLED_WARNINGS_clang := parentheses format undef \
+            logical-op-parentheses format-nonliteral int-conversion \
+            extern-initializer, \
         DISABLED_WARNINGS_solstudio := E_DECLARATION_IN_CODE \
             E_ASSIGNMENT_TYPE_MISMATCH E_NON_CONST_INIT, \
         LDFLAGS := $(LDFLAGS_JDKLIB) \
@@ -355,7 +363,7 @@ endif
 ################################################################################
 
 # The fast floor code loses precision.
-LCMS_CFLAGS=-DCMS_DONT_USE_FAST_FLOOR
+LCMS_CFLAGS+=-DCMS_DONT_USE_FAST_FLOOR
 
 LCMS_CFLAGS_JDKLIB := $(filter-out -xc99=%none, $(CFLAGS_JDKLIB))
 
@@ -389,8 +397,8 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBLCMS, \
         common/awt/debug \
         libawt/java2d, \
     HEADERS_FROM_SRC := $(LIBLCMS_HEADERS_FROM_SRC), \
-    DISABLED_WARNINGS_gcc := format-nonliteral type-limits misleading-indentation stringop-truncation, \
-    DISABLED_WARNINGS_clang := tautological-compare, \
+    DISABLED_WARNINGS_gcc := format-nonliteral type-limits misleading-indentation stringop-truncation cast-function-type, \
+    DISABLED_WARNINGS_clang := tautological-compare format-nonliteral, \
     DISABLED_WARNINGS_solstudio := E_STATEMENT_NOT_REACHED, \
     DISABLED_WARNINGS_microsoft := 4819, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
@@ -415,7 +423,6 @@ $(BUILD_LIBLCMS): $(BUILD_LIBAWT)
 # work because we have to declare all variables as volatile in result.
 
 ifeq ($(USE_EXTERNAL_LIBJPEG), true)
-  LIBJPEG_LIBS := -ljpeg
   BUILD_LIBJAVAJPEG_INCLUDE_FILES := \
       imageioJPEG.c \
       jpegdecoder.c
@@ -423,7 +430,6 @@ ifeq ($(USE_EXTERNAL_LIBJPEG), true)
   # as includes, instead the system headers should be used.
   LIBJPEG_HEADERS_FROM_SRC := false
 else
-  LIBJPEG_LIBS :=
   BUILD_LIBJAVAJPEG_INCLUDE_FILES :=
 endif
 
@@ -431,12 +437,12 @@ $(eval $(call SetupJdkLibrary, BUILD_LIBJAVAJPEG, \
     NAME := javajpeg, \
     INCLUDE_FILES := $(BUILD_LIBJAVAJPEG_INCLUDE_FILES), \
     OPTIMIZATION := HIGHEST, \
-    CFLAGS := $(CFLAGS_JDKLIB), \
+    CFLAGS := $(CFLAGS_JDKLIB) $(JPEG_CFLAGS), \
     HEADERS_FROM_SRC := $(LIBJPEG_HEADERS_FROM_SRC), \
     DISABLED_WARNINGS_gcc := clobbered implicit-fallthrough shift-negative-value, \
     LDFLAGS := $(LDFLAGS_JDKLIB) \
         $(call SET_SHARED_LIBRARY_ORIGIN), \
-    LIBS := $(LIBJPEG_LIBS) $(JDKLIB_LIBS), \
+    LIBS := $(JDKLIB_LIBS) $(JPEG_LIBS), \
     LIBS_windows := $(WIN_JAVA_LIB) jvm.lib, \
 ))
 
@@ -483,6 +489,7 @@ ifeq ($(findstring $(OPENJDK_TARGET_OS), windows macosx),)
       LIBS_unix := -lawt -ljvm -ljava, \
       LIBS_linux := $(LIBM) $(LIBDL), \
       LIBS_solaris := $(LIBM) $(LIBDL) $(LIBCXX), \
+      LIBS_bsd := $(LIBM), \
   ))
 
   # AIX warning explanation:
@@ -561,7 +568,7 @@ else
                        -DHAVE_SYSCONF -DHAVE_SYS_MMAN_H -DHAVE_UNISTD_H \
                        -DHB_NO_PRAGMA_GCC_DIAGNOSTIC
   endif
-  ifneq (, $(findstring $(OPENJDK_TARGET_OS), linux macosx))
+  ifneq (, $(findstring $(OPENJDK_TARGET_OS), linux macosx bsd))
     HARFBUZZ_CFLAGS += -DHAVE_INTEL_ATOMIC_PRIMITIVES
   endif
   ifeq ($(OPENJDK_TARGET_OS), solaris)
@@ -785,7 +792,7 @@ else # OPENJDK_TARGET_OS not windows
       JAWT_LIBS += -lawt_xawt
     else
       JAWT_LIBS += -lawt_headless
-      ifeq ($(OPENJDK_TARGET_OS), linux)
+      ifneq (, $(findstring $(OPENJDK_TARGET_OS), linux bsd))
         JAWT_CFLAGS += -DHEADLESS
       endif
     endif
@@ -836,7 +843,6 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
     LIBSPLASHSCREEN_HEADER_DIRS += libsplashscreen/giflib
   else
     LIBSPLASHSCREEN_EXCLUDES := giflib
-    GIFLIB_LIBS := -lgif
   endif
 
   ifeq ($(USE_EXTERNAL_LIBJPEG), false)
@@ -844,8 +850,6 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
     # additions to this library, and this was not done previously in the build.
     # LIBSPLASHSCREEN_EXTRA_SRC += libjavajpeg
     LIBSPLASHSCREEN_EXTRA_SRC += $(TOPDIR)/src/java.desktop/share/native/libjavajpeg
-  else
-    LIBJPEG_LIBS := -ljpeg
   endif
 
   ifeq ($(USE_EXTERNAL_LIBPNG), false)
@@ -904,6 +908,9 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
         -framework Cocoa
   else ifeq ($(OPENJDK_TARGET_OS), windows)
     LIBSPLASHSCREEN_LIBS += kernel32.lib user32.lib gdi32.lib delayimp.lib $(WIN_JAVA_LIB) jvm.lib
+  else ifeq ($(OPENJDK_TARGET_OS), bsd)
+    LIBSPLASHSCREEN_CFLAGS += $(ICONV_CFLAGS)
+    LIBSPLASHSCREEN_LIBS += $(X_LIBS) -lX11 -lXext $(LIBM) $(ICONV_LIBS) -pthread
   else
     LIBSPLASHSCREEN_LIBS += $(X_LIBS) -lX11 -lXext $(LIBM) -lpthread -ldl
   endif
@@ -922,11 +929,12 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
       EXCLUDES := $(LIBSPLASHSCREEN_EXCLUDES), \
       OPTIMIZATION := LOW, \
       CFLAGS := $(CFLAGS_JDKLIB) $(LIBSPLASHSCREEN_CFLAGS) \
-          $(GIFLIB_CFLAGS) $(LIBJPEG_CFLAGS) $(PNG_CFLAGS) $(LIBZ_CFLAGS), \
+          $(GIFLIB_CFLAGS) $(JPEG_CFLAGS) $(PNG_CFLAGS) $(LIBZ_CFLAGS), \
       EXTRA_HEADER_DIRS := $(LIBSPLASHSCREEN_HEADER_DIRS), \
       DISABLED_WARNINGS_gcc := sign-compare type-limits unused-result \
           maybe-uninitialized shift-negative-value implicit-fallthrough, \
-      DISABLED_WARNINGS_clang := incompatible-pointer-types, \
+      DISABLED_WARNINGS_clang := sign-compare incompatible-pointer-types \
+          macro-redefined, \
       DISABLED_WARNINGS_solstudio := E_NEWLINE_NOT_LAST E_DECLARATION_IN_CODE \
           E_STATEMENT_NOT_REACHED, \
       DISABLED_WARNINGS_microsoft := 4018 4244 4267, \
@@ -934,8 +942,9 @@ ifeq ($(ENABLE_HEADLESS_ONLY), false)
           $(call SET_SHARED_LIBRARY_ORIGIN), \
       LDFLAGS_macosx := -L$(INSTALL_LIBRARIES_HERE), \
       LDFLAGS_windows := -delayload:user32.dll, \
+      LDFLAGS_bsd := $(ICONV_LDFLAGS), \
       LIBS := $(JDKLIB_LIBS) $(LIBSPLASHSCREEN_LIBS) $(LIBZ_LIBS) \
-          $(GIFLIB_LIBS) $(LIBJPEG_LIBS) $(PNG_LIBS), \
+          $(GIFLIB_LIBS) $(JPEG_LIBS) $(PNG_LIBS), \
       LIBS_aix := -liconv, \
   ))
 

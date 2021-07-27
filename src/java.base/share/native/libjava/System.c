@@ -286,6 +286,10 @@ Java_java_lang_System_initProperties(JNIEnv *env, jclass cla, jobject props)
     }
 #endif
 
+#ifdef _BSDONLY_SOURCE
+    PUTPROP(props, "java.net.preferIPv4Stack", sprops->java_net_preferIPv4Stack);
+#endif
+
     /* !!! DO NOT call PUTPROP_ForPlatformNString before this line !!!
      * !!! The platform native encoding for strings has not been set up yet !!!
      */

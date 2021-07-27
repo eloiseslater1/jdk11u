@@ -64,6 +64,14 @@ public class Platform {
         return isOs("win");
     }
 
+    /**
+     * Checking whether the platform is *BSD
+     * @return
+     */
+    public static boolean isBSD() {
+        return osName.toLowerCase().endsWith("bsd");
+    }
+
     private static boolean isOs(String osname) {
         return osName.toLowerCase().startsWith(osname.toLowerCase());
     }

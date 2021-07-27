@@ -39,6 +39,7 @@
 #if defined(_ALLBSD_SOURCE)
 #define lseek64 lseek
 #define stat64 stat
+#define statvfs64 statvfs
 #define flock64 flock
 #define off64_t off_t
 #define F_SETLKW64 F_SETLKW
@@ -47,6 +48,7 @@
 #define pwrite64 pwrite
 #define ftruncate64 ftruncate
 #define fstat64 fstat
+#define fstatvfs64 fstatvfs
 #define fdatasync fsync
 #endif
 
@@ -289,7 +291,7 @@ Java_sun_nio_ch_FileDispatcherImpl_release0(JNIEnv *env, jobject this,
 static void closeFileDescriptor(JNIEnv *env, int fd) {
     if (fd != -1) {
         int result = close(fd);
-        if (result < 0)
+        if (result < 0 && errno != ECONNRESET)
             JNU_ThrowIOExceptionWithLastError(env, "Close failed");
     }
 }
@@ -323,11 +325,7 @@ Java_sun_nio_ch_FileDispatcherImpl_setDirect0(JNIEnv *env, jclass clazz,
 {
     jint fd = fdval(env, fdo);
     jint result;
-#ifdef MACOSX
-    struct statvfs file_stat;
-#else
     struct statvfs64 file_stat;
-#endif
 
 #if defined(O_DIRECT) || defined(F_NOCACHE) || defined(DIRECTIO_ON)
 #ifdef O_DIRECT
@@ -355,11 +353,7 @@ Java_sun_nio_ch_FileDispatcherImpl_setDirect0(JNIEnv *env, jclass clazz,
         return result;
     }
 #endif
-#ifdef MACOSX
-    result = fstatvfs(fd, &file_stat);
-#else
     result = fstatvfs64(fd, &file_stat);
-#endif
     if(result == -1) {
         JNU_ThrowIOExceptionWithLastError(env, "DirectIO setup failed");
         return result;
@@ -367,7 +361,8 @@ Java_sun_nio_ch_FileDispatcherImpl_setDirect0(JNIEnv *env, jclass clazz,
         result = (int)file_stat.f_frsize;
     }
 #else
-    result == -1;
+    JNU_ThrowIOException(env, "DirectIO unsupported");
+    result = -1;
 #endif
     return result;
 }

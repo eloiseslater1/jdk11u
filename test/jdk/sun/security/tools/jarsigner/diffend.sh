@@ -41,7 +41,7 @@ fi
 # set platform-dependent variables
 OS=`uname -s`
 case "$OS" in
-  SunOS | Linux | Darwin | AIX )
+  SunOS | Linux | Darwin | AIX | *BSD )
     NULL=/dev/null
     PS=":"
     FS="/"
@@ -62,6 +62,16 @@ case "$OS" in
   * )
     echo "Unrecognized operating system!"
     exit 1;
+    ;;
+esac
+
+# Make sure zip(1) is in PATH
+case "$OS" in
+  FreeBSD | OpenBSD )
+    PATH=${PATH}:/usr/local/bin
+    ;;
+  NetBSD )
+    PATH=${PATH}:/usr/pkg/bin
     ;;
 esac
 

@@ -37,6 +37,20 @@ ifeq ($(OSNAME), Darwin)
     ARCH=i586
   endif
 endif
+ifeq ($(findstring BSD,$(OSNAME)), BSD)
+  PLATFORM = bsd
+  ARCH = $(shell uname -m)
+  ifeq ($(ARCH), i386)
+    ARCH=i586
+  endif
+endif
+ifneq ($(findstring BSD,$(OSNAME)),)
+  PLATFORM = bsd
+  ARCH = $(shell uname -m)
+  ifeq ($(ARCH), i386)
+    ARCH=i586
+  endif
+endif
 ifeq ($(OSNAME), Windows_NT)
   # MKS
   PLATFORM=windows
@@ -439,12 +453,12 @@ check-jck:
 	fi
 
 all-summary: FRC
-	@if [ -n "`find $(TEST_OUTPUT_DIR) -name status.txt`" ]; then
+	@if [ -n "`find $(TEST_OUTPUT_DIR) -name status.txt`" ]; then \
 	    echo ; echo "Summary of test failures" ; \
 	    cat `find $(TEST_OUTPUT_DIR) -name summary.txt` | \
 		grep -v 'Not run' | grep -v 'Passed' ; \
 	    echo ; \
-	    $(EXIT) 1
+	    $(EXIT) 1 ; \
 	fi
 
 # Cleanup

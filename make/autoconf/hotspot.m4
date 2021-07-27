@@ -210,7 +210,11 @@ AC_DEFUN_ONCE([HOTSPOT_ENABLE_DISABLE_AOT],
       [enable ahead of time compilation feature. Default is auto, where aot is enabled if all dependencies are present.])])
 
   if test "x$enable_aot" = "x" || test "x$enable_aot" = "xauto"; then
-    ENABLE_AOT="true"
+    if test "x$OPENJDK_TARGET_CPU" = "xaarch64" -a "x$OPENJDK_TARGET_OS" != "xlinux"; then
+      ENABLE_AOT="false"
+    else
+      ENABLE_AOT="true"
+    fi
   elif test "x$enable_aot" = "xyes"; then
     ENABLE_AOT="true"
   elif test "x$enable_aot" = "xno"; then

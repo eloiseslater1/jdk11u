@@ -34,8 +34,16 @@
 
 #include OS_HEADER_INLINE(os)
 
+#if defined (__linux__)
 #include <sys/auxv.h>
 #include <asm/hwcap.h>
+#elif defined (__FreeBSD__)
+#include <machine/elf.h>
+#endif
+
+#ifndef HWCAP_ASIMD
+#define HWCAP_ASIMD (1<<1)
+#endif
 
 #ifndef HWCAP_AES
 #define HWCAP_AES   (1<<3)
@@ -163,6 +171,7 @@ void VM_Version::get_processor_features() {
     ContendedPaddingWidth = dcache_line;
   }
 
+#if defined(__linux__)
   unsigned long auxv = getauxval(AT_HWCAP);
 
   char buf[512];
@@ -190,6 +199,11 @@ void VM_Version::get_processor_features() {
     }
     fclose(f);
   }
+#elif defined(__FreeBSD__) || defined(__OpenBSD__)
+  char buf[512];
+  int cpu_lines = 0;
+  unsigned long auxv = os_get_processor_features();
+#endif
 
   // Enable vendor specific features
 
@@ -256,10 +270,17 @@ void VM_Version::get_processor_features() {
   }
 
   if (_cpu == CPU_ARM && (_model == 0xd07 || _model2 == 0xd07)) _features |= CPU_STXR_PREFETCH;
+
+#ifdef _BSDONLY_SOURCE
+  // A53 can be combined with A57 and A72 at least. Let's be more
+  // conservative and enable CPU_A53MAC work-around for all ARM boards
+  if (_cpu == CPU_ARM) _features |= CPU_A53MAC;
+#else
   // If an olde style /proc/cpuinfo (cpu_lines == 1) then if _model is an A57 (0xd07)
   // we assume the worst and assume we could be on a big little system and have
   // undisclosed A53 cores which we could be swapped to at any stage
   if (_cpu == CPU_ARM && cpu_lines == 1 && _model == 0xd07) _features |= CPU_A53MAC;
+#endif
 
   sprintf(buf, "0x%02x:0x%x:0x%03x:%d", _cpu, _variant, _model, _revision);
   if (_model2) sprintf(buf+strlen(buf), "(0x%03x)", _model2);

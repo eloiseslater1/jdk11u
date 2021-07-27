@@ -51,6 +51,7 @@ public class MyanmarTextTest {
     private static final String FONT_WINDOWS = "Myanmar Text";
     private static final String FONT_LINUX = "Padauk";
     private static final String FONT_MACOS = "Myanmar MN";
+    private static final String FONT_BSD = "Padauk";
 
     private static final String FONT_NAME = selectFontName();
 
@@ -137,6 +138,8 @@ public class MyanmarTextTest {
             return FONT_LINUX;
         } else if (osName.contains("mac")) {
             return FONT_MACOS;
+        } else if (osName.contains("bsd")) {
+            return FONT_BSD;
         } else {
             return null;
         }

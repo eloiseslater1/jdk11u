@@ -26,7 +26,7 @@
  * @bug 8211826
  * @summary StringIndexOutOfBoundsException happens via GetStringUTFRegion()
  * @modules java.desktop/sun.awt
- * @requires (os.family == "linux")
+ * @requires (os.family == "linux" | os.family == "freebsd" | os.family == "netbsd" | os.family == "openbsd")
  * @run main GtkIconTest
  */
 

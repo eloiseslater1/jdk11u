@@ -80,7 +80,7 @@ class UnixTest extends ProcessTest {
         processTrapScript.deleteOnExit();
         FileWriter fstream = new FileWriter(processTrapScript);
         try (BufferedWriter out = new BufferedWriter(fstream)) {
-            out.write("#!/bin/bash\n" +
+            out.write("#!/bin/sh\n" +
                 "echo \\\"ProcessTrap.sh started: trapping SIGTERM/SIGINT\\\"\n" +
                 "trap bashtrap SIGTERM SIGINT\n" +
                 "bashtrap()\n" +
@@ -150,7 +150,8 @@ public class DestroyTest {
             File tempFile = File.createTempFile("ProcessTrap-", ".sh", userDir);
             if (osName.startsWith("Linux") == true
                     || osName.equals("SunOS")
-                    || osName.equals("AIX")) {
+                    || osName.equals("AIX")
+                    || osName.endsWith("BSD")) {
                 return new UnixTest(tempFile);
             } else if (osName.startsWith("Mac OS")) {
                 return new MacTest(tempFile);
