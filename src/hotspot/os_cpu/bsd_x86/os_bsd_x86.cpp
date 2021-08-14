@@ -503,16 +503,6 @@ JVM_handle_bsd_signal(int sig,
       return 1;
     }
   }
-
-/*
-  NOTE: does not seem to work on bsd.
-  if (info == NULL || info->si_code <= 0 || info->si_code == SI_NOINFO) {
-    // can't decode this kind of signal
-    info = NULL;
-  } else {
-    assert(sig == info->si_signo, "bad siginfo");
-  }
-*/
   // decide if this trap can be handled by a stub
   address stub = NULL;
 
