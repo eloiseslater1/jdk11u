@@ -101,7 +101,6 @@ typedef struct lib_info {
 // list of threads
 typedef struct sa_thread_info {
    lwpid_t                  lwp_id;     // same as pthread_t
-   pthread_t                pthread_id; //
    struct reg               regs;       // not for process, core uses for caching regset
    struct sa_thread_info*   next;
 } sa_thread_info;
@@ -166,7 +165,7 @@ void print_debug(const char* format,...);
 void print_error(const char* format,...);
 bool is_debug();
 
-typedef bool (*thread_info_callback)(struct ps_prochandle* ph, pthread_t pid, lwpid_t lwpid);
+typedef bool (*thread_info_callback)(struct ps_prochandle* ph, lwpid_t lwpid);
 
 // reads thread info using libthread_db and calls above callback for each thread
 bool read_thread_info(struct ps_prochandle* ph, thread_info_callback cb);
@@ -181,7 +180,7 @@ lib_info* add_lib_info(struct ps_prochandle* ph, const char* libname, uintptr_t 
 lib_info* add_lib_info_fd(struct ps_prochandle* ph, const char* libname, int fd,
                           uintptr_t base);
 
-sa_thread_info* add_thread_info(struct ps_prochandle* ph, pthread_t pthread_id, lwpid_t lwp_id);
+sa_thread_info* add_thread_info(struct ps_prochandle* ph, lwpid_t lwp_id);
 // a test for ELF signature without using libelf
 
 #ifdef __APPLE__

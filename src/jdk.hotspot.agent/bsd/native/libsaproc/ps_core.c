@@ -953,8 +953,7 @@ static bool core_handle_prstatus(struct ps_prochandle* ph, const char* buf, size
    prstatus_t* prstat = (prstatus_t*) buf;
    sa_thread_info* newthr;
    print_debug("got integer regset for lwp %d\n", prstat->pr_pid);
-   // we set pthread_t to -1 for core dump
-   if((newthr = add_thread_info(ph, (pthread_t) -1,  prstat->pr_pid)) == NULL)
+   if((newthr = add_thread_info(ph, prstat->pr_pid)) == NULL)
       return false;
 
    // copy regs

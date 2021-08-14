@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -234,14 +234,14 @@ JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_setSAA
 /*
  * Class:     sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal
  * Method:    attach0
- * Signature: (IZ)V
+ * Signature: (I)V
  */
-JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_attach0__IZ
-  (JNIEnv *env, jobject this_obj, jint jpid, jboolean is_in_container) {
+JNIEXPORT void JNICALL Java_sun_jvm_hotspot_debugger_bsd_BsdDebuggerLocal_attach0__I
+  (JNIEnv *env, jobject this_obj, jint jpid) {
 
   char err_buf[200];
   struct ps_prochandle* ph;
-  if ((ph = Pgrab(jpid, err_buf, sizeof(err_buf), is_in_container)) == NULL) {
+  if ((ph = Pgrab(jpid, err_buf, sizeof(err_buf))) == NULL) {
     char msg[230];
     snprintf(msg, sizeof(msg), "Can't attach to the process: %s", err_buf);
     THROW_NEW_DEBUGGER_EXCEPTION(msg);

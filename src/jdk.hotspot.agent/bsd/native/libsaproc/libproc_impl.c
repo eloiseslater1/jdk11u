@@ -310,7 +310,7 @@ const char* symbol_for_pc(struct ps_prochandle* ph, uintptr_t addr, uintptr_t* p
 }
 
 // add a thread to ps_prochandle
-sa_thread_info* add_thread_info(struct ps_prochandle* ph, pthread_t pthread_id, lwpid_t lwp_id) {
+sa_thread_info* add_thread_info(struct ps_prochandle* ph, lwpid_t lwp_id) {
   sa_thread_info* newthr;
   if ( (newthr = (sa_thread_info*) calloc(1, sizeof(sa_thread_info))) == NULL) {
     print_debug("can't allocate memory for thread_info\n");
@@ -318,7 +318,6 @@ sa_thread_info* add_thread_info(struct ps_prochandle* ph, pthread_t pthread_id, 
   }
 
   // initialize thread info
-  newthr->pthread_id = pthread_id;
   newthr->lwp_id = lwp_id;
 
   // add new thread to the list
@@ -382,7 +381,7 @@ bool read_thread_info(struct ps_prochandle* ph, thread_info_callback cb) {
     }
 
     // Execute callback
-    if (cb(ph, (pthread_t) -1, thread_ids[i]) != true) {
+    if (cb(ph, thread_ids[i]) != true) {
       print_debug("Callback : unable to add LWP %d\n", thread_ids[i]);
       return false;
     }

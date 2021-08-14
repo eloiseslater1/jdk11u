@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2003, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2003, 2019, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -115,7 +115,7 @@ struct ps_prochandle;
 
 // attach to a process
 JNIEXPORT struct ps_prochandle* JNICALL
-Pgrab(pid_t pid, char* err_buf, size_t err_buf_len, bool is_in_container);
+Pgrab(pid_t pid, char* err_buf, size_t err_buf_len);
 
 // attach to a core dump
 JNIEXPORT struct ps_prochandle* JNICALL
