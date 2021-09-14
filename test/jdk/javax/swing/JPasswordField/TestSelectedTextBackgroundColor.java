@@ -23,7 +23,7 @@
 
 /*
  * @test
- * @requires (os.family == "linux")
+ * @requires (os.family == "linux" | os.family == "freebsd" | os.family == "netbsd" | os.family == "openbsd")
  * @key headful
  * @bug 8214112
  * @summary Tests JPasswordField selected Text background color
@@ -73,8 +73,9 @@ public class TestSelectedTextBackgroundColor {
     }
 
     public static void main(String[] args) throws Exception {
-        if (!System.getProperty("os.name").startsWith("Linux")) {
-            System.out.println("This test is meant for Linux platform only");
+        if (!System.getProperty("os.name").startsWith("Linux") &&
+            !System.getProperty("os.name").endsWith("BSD")) {
+            System.out.println("This test is meant for Linux and BSD platforms only");
             return;
         }
 
