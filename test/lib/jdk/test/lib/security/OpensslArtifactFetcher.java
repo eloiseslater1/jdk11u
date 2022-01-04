@@ -63,6 +63,8 @@ public class OpensslArtifactFetcher {
                     path = fetchOpenssl(MACOSX_X64.class);
                 } else if (Platform.isWindows()) {
                     path = fetchOpenssl(WINDOWS_X64.class);
+                } else if (Platform.isBSD()) {
+                    path = fetchOpenssl(BSD_X64.class);
                 }
                 if (verifyOpensslVersion(path, version)) {
                     return path;
@@ -123,6 +125,13 @@ public class OpensslArtifactFetcher {
         }
         return path;
     }
+
+    @Artifact(
+            organization = "jpg.tests.jdk.openssl",
+            name = "openssl-bsd_x64",
+            revision = "1.1.1g",
+            extension = "zip")
+    private static class BSD_X64 { }
 
     @Artifact(
             organization = "jpg.tests.jdk.openssl",
