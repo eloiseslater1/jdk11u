@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2006, 2019, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2014, 2019, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2006, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2014, 2020, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,7 +25,67 @@
 
 #include "precompiled.hpp"
 #include "runtime/os.hpp"
-#include "runtime/vm_version.hpp"
+#include "vm_version_aarch64.hpp"
+
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+
+static bool cpu_has(const char* optional) {
+  uint32_t val;
+  size_t len = sizeof(val);
+  if (sysctlbyname(optional, &val, &len, NULL, 0)) {
+    return false;
+  }
+  return val;
+}
+
+void VM_Version::get_os_cpu_info() {
+  size_t sysctllen;
+
+  // hw.optional.floatingpoint always returns 1, see
+  // https://github.com/apple/darwin-xnu/blob/master/bsd/kern/kern_mib.c#L416.
+  // ID_AA64PFR0_EL1 describes AdvSIMD always equals to FP field.
+  assert(cpu_has("hw.optional.floatingpoint"), "should be");
+  assert(cpu_has("hw.optional.neon"), "should be");
+  _features = CPU_FP | CPU_ASIMD;
+
+  // Only few features are available via sysctl, see line 614
+  // https://opensource.apple.com/source/xnu/xnu-6153.141.1/bsd/kern/kern_mib.c.auto.html
+  if (cpu_has("hw.optional.armv8_crc32"))     _features |= CPU_CRC32;
+  if (cpu_has("hw.optional.armv8_1_atomics")) _features |= CPU_LSE;
+
+  int cache_line_size;
+  int hw_conf_cache_line[] = { CTL_HW, HW_CACHELINE };
+  sysctllen = sizeof(cache_line_size);
+  if (sysctl(hw_conf_cache_line, 2, &cache_line_size, &sysctllen, NULL, 0)) {
+    cache_line_size = 16;
+  }
+  _icache_line_size = 16; // minimal line lenght CCSIDR_EL1 can hold
+  _dcache_line_size = cache_line_size;
+
+  uint64_t dczid_el0;
+  __asm__ (
+    "mrs %0, DCZID_EL0\n"
+    : "=r"(dczid_el0)
+  );
+  if (!(dczid_el0 & 0x10)) {
+    _zva_length = 4 << (dczid_el0 & 0xf);
+  }
+
+  int family;
+  sysctllen = sizeof(family);
+  if (sysctlbyname("hw.cpufamily", &family, &sysctllen, NULL, 0)) {
+    family = 0;
+  }
+  _model = family;
+  _cpu = CPU_APPLE;
+}
+
+bool VM_Version::is_cpu_emulated() {
+  return false;
+}
+
+#else // __APPLE__
 
 #include <machine/armreg.h>
 #if defined (__FreeBSD__)
@@ -202,59 +262,10 @@ const struct cpu_implementers cpu_implementers[] = {
 	CPU_IMPLEMENTER_NONE,
 };
 
-#ifdef __OpenBSD__
-// READ_SPECIALREG is not available from userland on OpenBSD.
-// Hardcode these values to the "lowest common denominator"
-unsigned long VM_Version::os_get_processor_features() {
-  _cpu = CPU_IMPL_ARM;
-  _model = CPU_PART_CORTEX_A53;
-  _variant = 0;
-  _revision = 0;
-  return HWCAP_ASIMD;
-}
-#else
-unsigned long VM_Version::os_get_processor_features() {
-  struct cpu_desc cpu_desc[1];
-  struct cpu_desc user_cpu_desc;
+#ifdef __FreeBSD__
+static unsigned long os_get_processor_features() {
   unsigned long auxv = 0;
   uint64_t id_aa64isar0, id_aa64pfr0;
-
-  uint32_t midr;
-  uint32_t impl_id;
-  uint32_t part_id;
-  uint32_t cpu = 0;
-  size_t i;
-  const struct cpu_parts *cpu_partsp = NULL;
-
-  midr = READ_SPECIALREG(midr_el1);
-
-  impl_id = CPU_IMPL(midr);
-  for (i = 0; i < nitems(cpu_implementers); i++) {
-    if (impl_id == cpu_implementers[i].impl_id ||
-      cpu_implementers[i].impl_id == 0) {
-      cpu_desc[cpu].cpu_impl = impl_id;
-      cpu_desc[cpu].cpu_impl_name = cpu_implementers[i].impl_name;
-      cpu_partsp = cpu_implementers[i].cpu_parts;
-      break;
-    }
-  }
-
-  part_id = CPU_PART(midr);
-  for (i = 0; &cpu_partsp[i] != NULL; i++) {
-    if (part_id == cpu_partsp[i].part_id || cpu_partsp[i].part_id == 0) {
-      cpu_desc[cpu].cpu_part_num = part_id;
-      cpu_desc[cpu].cpu_part_name = cpu_partsp[i].part_name;
-      break;
-    }
-  }
-
-  cpu_desc[cpu].cpu_revision = CPU_REV(midr);
-  cpu_desc[cpu].cpu_variant = CPU_VAR(midr);
-
-  _cpu = cpu_desc[cpu].cpu_impl;
-  _variant = cpu_desc[cpu].cpu_variant;
-  _model = cpu_desc[cpu].cpu_part_num;
-  _revision = cpu_desc[cpu].cpu_revision;
 
   id_aa64isar0 = READ_SPECIALREG(id_aa64isar0_el1);
   id_aa64pfr0 = READ_SPECIALREG(id_aa64pfr0_el1);
@@ -287,3 +298,88 @@ unsigned long VM_Version::os_get_processor_features() {
   return auxv;
 }
 #endif
+
+void VM_Version::get_os_cpu_info() {
+#ifdef __OpenBSD__
+  // READ_SPECIALREG is not available from userland on OpenBSD.
+  // Hardcode these values to the "lowest common denominator"
+  _cpu = CPU_IMPL_ARM;
+  _model = CPU_PART_CORTEX_A53;
+  _variant = 0;
+  _revision = 0;
+  _features = HWCAP_ASIMD;
+#elif defined(__FreeBSD__)
+  struct cpu_desc cpu_desc[1];
+  struct cpu_desc user_cpu_desc;
+
+  uint32_t midr;
+  uint32_t impl_id;
+  uint32_t part_id;
+  uint32_t cpu = 0;
+  size_t i;
+  const struct cpu_parts *cpu_partsp = NULL;
+
+  midr = READ_SPECIALREG(midr_el1);
+
+  impl_id = CPU_IMPL(midr);
+  for (i = 0; i < nitems(cpu_implementers); i++) {
+    if (impl_id == cpu_implementers[i].impl_id ||
+      cpu_implementers[i].impl_id == 0) {
+      cpu_desc[cpu].cpu_impl = impl_id;
+      cpu_desc[cpu].cpu_impl_name = cpu_implementers[i].impl_name;
+      cpu_partsp = cpu_implementers[i].cpu_parts;
+      break;
+    }
+  }
+  part_id = CPU_PART(midr);
+  for (i = 0; &cpu_partsp[i] != NULL; i++) {
+    if (part_id == cpu_partsp[i].part_id || cpu_partsp[i].part_id == 0) {
+      cpu_desc[cpu].cpu_part_num = part_id;
+      cpu_desc[cpu].cpu_part_name = cpu_partsp[i].part_name;
+      break;
+    }
+  }
+
+  cpu_desc[cpu].cpu_revision = CPU_REV(midr);
+  cpu_desc[cpu].cpu_variant = CPU_VAR(midr);
+
+  _cpu = cpu_desc[cpu].cpu_impl;
+  _variant = cpu_desc[cpu].cpu_variant;
+  _model = cpu_desc[cpu].cpu_part_num;
+  _revision = cpu_desc[cpu].cpu_revision;
+
+  uint64_t auxv = os_get_processor_features();
+
+  _features = auxv & (
+      HWCAP_FP      |
+      HWCAP_ASIMD   |
+      HWCAP_EVTSTRM |
+      HWCAP_AES     |
+      HWCAP_PMULL   |
+      HWCAP_SHA1    |
+      HWCAP_SHA2    |
+      HWCAP_CRC32   |
+      HWCAP_ATOMICS |
+      HWCAP_DCPOP   |
+      HWCAP_SHA3    |
+      HWCAP_SHA512  |
+      HWCAP_SVE);
+#endif
+
+  uint64_t ctr_el0;
+  uint64_t dczid_el0;
+  __asm__ (
+    "mrs %0, CTR_EL0\n"
+    "mrs %1, DCZID_EL0\n"
+    : "=r"(ctr_el0), "=r"(dczid_el0)
+  );
+
+  _icache_line_size = (1 << (ctr_el0 & 0x0f)) * 4;
+  _dcache_line_size = (1 << ((ctr_el0 >> 16) & 0x0f)) * 4;
+
+  if (!(dczid_el0 & 0x10)) {
+    _zva_length = 4 << (dczid_el0 & 0xf);
+  }
+}
+
+#endif // __APPLE__
