@@ -236,7 +236,11 @@ sa_handler_t sigset(int sig, sa_handler_t disp) {
 static int call_os_sigaction(int sig, const struct sigaction  *act,
                              struct sigaction *oact) {
   if (os_sigaction == NULL) {
+#if defined(__NetBSD__)
+    os_sigaction = (sigaction_t)dlsym(RTLD_NEXT, "__sigaction14");
+#else
     os_sigaction = (sigaction_t)dlsym(RTLD_NEXT, "sigaction");
+#endif
     if (os_sigaction == NULL) {
       printf("%s\n", dlerror());
       exit(0);

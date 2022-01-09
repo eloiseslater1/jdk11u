@@ -300,7 +300,7 @@ static unsigned long os_get_processor_features() {
 #endif
 
 void VM_Version::get_os_cpu_info() {
-#ifdef __OpenBSD__
+#if defined(__OpenBSD__) || defined(__NetBSD__)
   // READ_SPECIALREG is not available from userland on OpenBSD.
   // Hardcode these values to the "lowest common denominator"
   _cpu = CPU_IMPL_ARM;
