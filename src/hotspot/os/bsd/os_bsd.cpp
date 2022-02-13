@@ -22,6 +22,16 @@
  *
  */
 
+/*
+ * On macOS MAP_JIT cannot be used in conjunction with MAP_FIXED when mapping
+ * a page for codecache. Therefore our traditional technique of doing commit
+ * and uncommit - replacing a mapping with another one at the same address
+ * range but swapped MAP_NORESERVE - does not work.
+ * The "exec" flag basically means "its code cache" and it should be used
+ * consistently for the same mapping (reserve-commit-uncommit etc)
+ * This affects pd_reserve_memory, pd_commit_memory, pd_uncommit_memory functions
+ */
+
 // no precompiled headers
 #include "jvm.h"
 #include "classfile/classLoader.hpp"
@@ -522,7 +532,9 @@ void os::init_system_properties_values() {
       }
     }
     Arguments::set_java_home(buf);
-    set_boot_path('/', ':');
+    if (!set_boot_path('/', ':')) {
+        vm_exit_during_initialization("Failed setting boot class path.", NULL);
+    }
   }
 
   // Where to look for native libraries.
@@ -2224,6 +2236,20 @@ static void warn_fail_commit_memory(char* addr, size_t size, bool exec,
 //       problem.
 bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
   int prot = exec ? PROT_READ|PROT_WRITE|PROT_EXEC : PROT_READ|PROT_WRITE;
+#if defined(__APPLE__)
+  if (exec) {
+    // Do not replace MAP_JIT mappings, see JDK-8234930
+    if (::mprotect(addr, size, prot) == 0) {
+      return true;
+    }
+  } else {
+    uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
+                                       MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
+    if (res != (uintptr_t) MAP_FAILED) {
+      return true;
+    }
+  }
+#else
   uintptr_t res = (uintptr_t) ::mmap(addr, size, prot,
                                      MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0);
   if (res != (uintptr_t) MAP_FAILED) {
@@ -2235,6 +2261,7 @@ bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
   NOT_PRODUCT(warn_fail_commit_memory(addr, size, exec, errno);)
 
   return false;
+#endif // __APPLE__
 }
 
 bool os::pd_commit_memory(char* addr, size_t size, size_t alignment_hint,
@@ -2300,10 +2327,24 @@ char *os::scan_pages(char *start, char* end, page_info* page_expected, page_info
 }
 
 
-bool os::pd_uncommit_memory(char* addr, size_t size) {
+MACOS_ONLY(bool os::pd_uncommit_memory(char* addr, size_t size, bool executable))
+NOT_MACOS(bool os::pd_uncommit_memory(char* addr, size_t size)) {
+#if defined(__APPLE__)
+  if (executable) {
+    if (::madvise(addr, size, MADV_FREE) != 0) {
+      return false;
+    }
+    return ::mprotect(addr, size, PROT_NONE) == 0;
+  } else {
+    uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
+        MAP_PRIVATE|MAP_FIXED|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
+    return res  != (uintptr_t) MAP_FAILED;
+  }
+#else
   uintptr_t res = (uintptr_t) ::mmap(addr, size, PROT_NONE,
                                      MAP_PRIVATE|MAP_FIXED|MAP_NORESERVE|MAP_ANONYMOUS, -1, 0);
   return res  != (uintptr_t) MAP_FAILED;
+#endif // __APPLE__
 }
 
 bool os::pd_create_stack_guard_pages(char* addr, size_t size) {
@@ -2322,11 +2363,17 @@ bool os::remove_stack_guard_pages(char* addr, size_t size) {
 // 'requested_addr' is only treated as a hint, the return value may or
 // may not start from the requested address. Unlike Bsd mmap(), this
 // function returns NULL to indicate failure.
-static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed) {
+static char* anon_mmap(char* requested_addr, size_t bytes, bool fixed, bool executable = false) {
   char * addr;
   int flags;
 
   flags = MAP_PRIVATE | MAP_NORESERVE | MAP_ANONYMOUS;
+#ifdef __APPLE__
+  if (executable) {
+    guarantee(!fixed, "MAP_JIT (for execute) is incompatible with MAP_FIXED");
+    flags |= MAP_JIT;
+  }
+#endif
   if (fixed) {
     assert((uintptr_t)requested_addr % os::Bsd::page_size() == 0, "unaligned address");
     flags |= MAP_FIXED;
@@ -2345,10 +2392,18 @@ static int anon_munmap(char * addr, size_t size) {
   return ::munmap(addr, size) == 0;
 }
 
+#if defined(__APPLE__)
+char* os::pd_reserve_memory(size_t bytes, char* requested_addr,
+                            size_t alignment_hint,
+                            bool executable) {
+  return anon_mmap(requested_addr, bytes, (requested_addr != NULL), executable);
+}
+#else
 char* os::pd_reserve_memory(size_t bytes, char* requested_addr,
                             size_t alignment_hint) {
   return anon_mmap(requested_addr, bytes, (requested_addr != NULL));
 }
+#endif
 
 bool os::pd_release_memory(char* addr, size_t size) {
   return anon_munmap(addr, size);
