@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 1999, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, Red Hat Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -26,7 +26,13 @@
 #ifndef OS_CPU_BSD_AARCH64_VM_BYTES_BSD_AARCH64_INLINE_HPP
 #define OS_CPU_BSD_AARCH64_VM_BYTES_BSD_AARCH64_INLINE_HPP
 
-#if defined(__FreeBSD__)
+#if defined(__APPLE__)
+#include <libkern/OSByteOrder.h>
+
+#  define bswap_16(x) OSSwapInt16(x)
+#  define bswap_32(x) OSSwapInt32(x)
+#  define bswap_64(x) OSSwapInt64(x)
+#elif defined(__FreeBSD__)
 #  define bswap_16(x) __bswap16(x)
 #  define bswap_32(x) __bswap32(x)
 #  define bswap_64(x) __bswap64(x)
@@ -38,6 +44,8 @@
 #  define bswap_16(x) bswap16(x)
 #  define bswap_32(x) bswap32(x)
 #  define bswap_64(x) bswap64(x)
+#else
+#  error "Unimplemented"
 #endif
 
 // Efficient swapping of data bytes from Java byte

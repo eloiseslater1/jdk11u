@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2003, 2012, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2015, Red Hat Inc.
+ * Copyright (c) 2003, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -107,10 +107,8 @@ class BsdCDebugger implements CDebugger {
        Address pc  = context.getRegisterAsAddress(AARCH64ThreadContext.PC);
        if (pc == null) return null;
        return new BsdAARCH64CFrame(dbg, fp, pc);
-     } else {
-       // Runtime exception thrown by BsdThreadContextFactory if unknown cpu
-       ThreadContext context = (ThreadContext) thread.getContext();
-       return context.getTopFrame(dbg);
+    } else {
+       throw new DebuggerException(cpu + " is not yet supported");
     }
   }
 

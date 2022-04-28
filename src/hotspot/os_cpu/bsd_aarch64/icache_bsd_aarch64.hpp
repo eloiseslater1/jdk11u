@@ -1,6 +1,7 @@
 /*
- * Copyright (c) 1999, 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 1999, 2021, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,10 +35,18 @@ class ICache : public AbstractICache {
  public:
   static void initialize();
   static void invalidate_word(address addr) {
+#ifdef __APPLE__
     __builtin___clear_cache((char *)addr, (char *)(addr + 4));
+#else
+    __clear_cache((char *)addr, (char *)(addr + 4));
+#endif
   }
   static void invalidate_range(address start, int nbytes) {
+#ifdef __APPLE__
     __builtin___clear_cache((char *)start, (char *)(start + nbytes));
+#else
+    __clear_cache((char *)start, (char *)(start + nbytes));
+#endif
   }
 };
 

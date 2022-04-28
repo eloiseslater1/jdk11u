@@ -26,6 +26,83 @@
 #ifndef OS_CPU_BSD_AARCH64_VM_COPY_BSD_AARCH64_INLINE_HPP
 #define OS_CPU_BSD_AARCH64_VM_COPY_BSD_AARCH64_INLINE_HPP
 
+#ifdef __APPLE__
+
+#define COPY_SMALL(from, to, count)                                     \
+{                                                                       \
+        long tmp0, tmp1, tmp2, tmp3;                                    \
+        long tmp4, tmp5, tmp6, tmp7;                                    \
+  __asm volatile(                                                       \
+"       adr     %[t0], 0f;\n"                                           \
+"       add     %[t0], %[t0], %[cnt], lsl #5;\n"                        \
+"       br      %[t0];\n"                                               \
+"       .align  5;\n"                                                   \
+"0:"                                                                    \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldr     %[t0], [%[s], #0];\n"                                   \
+"       str     %[t0], [%[d], #0];\n"                                   \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       ldr     %[t2], [%[s], #16];\n"                                  \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       str     %[t2], [%[d], #16];\n"                                  \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       ldp     %[t2], %[t3], [%[s], #16];\n"                           \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       stp     %[t2], %[t3], [%[d], #16];\n"                           \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       ldp     %[t2], %[t3], [%[s], #16];\n"                           \
+"       ldr     %[t4], [%[s], #32];\n"                                  \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       stp     %[t2], %[t3], [%[d], #16];\n"                           \
+"       str     %[t4], [%[d], #32];\n"                                  \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       ldp     %[t2], %[t3], [%[s], #16];\n"                           \
+"       ldp     %[t4], %[t5], [%[s], #32];\n"                           \
+"2:"                                                                    \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       stp     %[t2], %[t3], [%[d], #16];\n"                           \
+"       stp     %[t4], %[t5], [%[d], #32];\n"                           \
+"       b       1f;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldr     %[t6], [%[s], #0];\n"                                   \
+"       ldp     %[t0], %[t1], [%[s], #8];\n"                            \
+"       ldp     %[t2], %[t3], [%[s], #24];\n"                           \
+"       ldp     %[t4], %[t5], [%[s], #40];\n"                           \
+"       str     %[t6], [%[d]], #8;\n"                                   \
+"       b       2b;\n"                                                  \
+"       .align  5;\n"                                                   \
+"       ldp     %[t0], %[t1], [%[s], #0];\n"                            \
+"       ldp     %[t2], %[t3], [%[s], #16];\n"                           \
+"       ldp     %[t4], %[t5], [%[s], #32];\n"                           \
+"       ldp     %[t6], %[t7], [%[s], #48];\n"                           \
+"       stp     %[t0], %[t1], [%[d], #0];\n"                            \
+"       stp     %[t2], %[t3], [%[d], #16];\n"                           \
+"       stp     %[t4], %[t5], [%[d], #32];\n"                           \
+"       stp     %[t6], %[t7], [%[d], #48];\n"                           \
+"1:"                                                                    \
+                                                                        \
+  : [s]"+r"(from), [d]"+r"(to), [cnt]"+r"(count),                       \
+    [t0]"=&r"(tmp0), [t1]"=&r"(tmp1), [t2]"=&r"(tmp2), [t3]"=&r"(tmp3), \
+    [t4]"=&r"(tmp4), [t5]"=&r"(tmp5), [t6]"=&r"(tmp6), [t7]"=&r"(tmp7)  \
+  :                                                                     \
+  : "memory", "cc");                                                    \
+}
+
+#else // __APPLE
+
 #define COPY_SMALL(from, to, count)                                     \
 {                                                                       \
         long tmp0, tmp1, tmp2, tmp3;                                    \
@@ -98,6 +175,8 @@
   :                                                                     \
   : "memory", "cc");                                                    \
 }
+
+#endif // __APPLE__
 
 static void pd_conjoint_words(const HeapWord* from, HeapWord* to, size_t count) {
   __asm volatile( "prfm pldl1strm, [%[s], #0];" :: [s]"r"(from) : "memory");

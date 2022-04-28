@@ -26,9 +26,6 @@
 #ifndef OS_CPU_BSD_AARCH64_VM_ATOMIC_BSD_AARCH64_HPP
 #define OS_CPU_BSD_AARCH64_VM_ATOMIC_BSD_AARCH64_HPP
 
-#include "atomic_aarch64.hpp"
-#include "runtime/vm_version.hpp"
-
 // Implementation of class atomic
 
 // Note that memory_order_conservative requires a full barrier after atomic stores.
@@ -37,6 +34,58 @@
 #define FULL_MEM_BARRIER  __sync_synchronize()
 #define READ_MEM_BARRIER  __atomic_thread_fence(__ATOMIC_ACQUIRE);
 #define WRITE_MEM_BARRIER __atomic_thread_fence(__ATOMIC_RELEASE);
+
+#ifdef __APPLE__
+
+template<size_t byte_size>
+struct Atomic::PlatformAdd
+  : Atomic::AddAndFetch<Atomic::PlatformAdd<byte_size> >
+{
+  template<typename I, typename D>
+  D add_and_fetch(I add_value, D volatile* dest, atomic_memory_order order) const {
+    D res = __atomic_add_fetch(dest, add_value, __ATOMIC_RELEASE);
+    FULL_MEM_BARRIER;
+    return res;
+  }
+};
+
+template<size_t byte_size>
+template<typename T>
+inline T Atomic::PlatformXchg<byte_size>::operator()(T exchange_value,
+                                                     T volatile* dest,
+                                                     atomic_memory_order order) const {
+  STATIC_ASSERT(byte_size == sizeof(T));
+  T res = __atomic_exchange_n(dest, exchange_value, __ATOMIC_RELEASE);
+  FULL_MEM_BARRIER;
+  return res;
+}
+
+template<size_t byte_size>
+template<typename T>
+inline T Atomic::PlatformCmpxchg<byte_size>::operator()(T exchange_value,
+                                                        T volatile* dest,
+                                                        T compare_value,
+                                                        atomic_memory_order order) const {
+  STATIC_ASSERT(byte_size == sizeof(T));
+  if (order == memory_order_relaxed) {
+    T value = compare_value;
+    __atomic_compare_exchange(dest, &value, &exchange_value, /*weak*/false,
+                              __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    return value;
+  } else {
+    T value = compare_value;
+    FULL_MEM_BARRIER;
+    __atomic_compare_exchange(dest, &value, &exchange_value, /*weak*/false,
+                              __ATOMIC_RELAXED, __ATOMIC_RELAXED);
+    FULL_MEM_BARRIER;
+    return value;
+  }
+}
+
+#else // __APPLE__
+
+#include "atomic_aarch64.hpp"
+#include "runtime/vm_version.hpp"
 
 // Call one of the stubs from C++. This uses the C calling convention,
 // but this asm definition is used in order only to clobber the
@@ -178,5 +227,7 @@ inline T Atomic::PlatformCmpxchg<8>::operator()(T exchange_value,
 
   return atomic_fastcall(stub, dest, compare_value, exchange_value);
 }
+
+#endif // __APPLE__
 
 #endif // OS_CPU_BSD_AARCH64_VM_ATOMIC_BSD_AARCH64_HPP

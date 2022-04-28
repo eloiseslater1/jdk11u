@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2006, 2021, Oracle and/or its affiliates. All rights reserved.
  * Copyright (c) 2014, 2020, Red Hat Inc. All rights reserved.
+ * Copyright (c) 2021, Azul Systems, Inc. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,9 +26,11 @@
 
 #include "precompiled.hpp"
 #include "runtime/os.hpp"
-#include "vm_version_aarch64.hpp"
 
 #ifdef __APPLE__
+
+#include "runtime/java.hpp"
+#include "runtime/vm_version.hpp"
 #include <sys/sysctl.h>
 
 static bool cpu_has(const char* optional) {
@@ -71,21 +74,18 @@ void VM_Version::get_os_cpu_info() {
   if (!(dczid_el0 & 0x10)) {
     _zva_length = 4 << (dczid_el0 & 0xf);
   }
-
   int family;
   sysctllen = sizeof(family);
   if (sysctlbyname("hw.cpufamily", &family, &sysctllen, NULL, 0)) {
     family = 0;
-  }
+   }
   _model = family;
   _cpu = CPU_APPLE;
 }
 
-bool VM_Version::is_cpu_emulated() {
-  return false;
-}
-
 #else // __APPLE__
+
+#include "vm_version_aarch64.hpp"
 
 #include <machine/armreg.h>
 #if defined (__FreeBSD__)
@@ -383,3 +383,7 @@ void VM_Version::get_os_cpu_info() {
 }
 
 #endif // __APPLE__
+
+bool VM_Version::is_cpu_emulated() {
+  return false;
+}
