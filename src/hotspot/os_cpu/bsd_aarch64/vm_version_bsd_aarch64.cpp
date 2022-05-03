@@ -83,6 +83,10 @@ void VM_Version::get_os_cpu_info() {
   _cpu = CPU_APPLE;
 }
 
+bool VM_Version::is_cpu_emulated() {
+  return false;
+}
+
 #else // __APPLE__
 
 #include "vm_version_aarch64.hpp"
@@ -383,7 +387,3 @@ void VM_Version::get_os_cpu_info() {
 }
 
 #endif // __APPLE__
-
-bool VM_Version::is_cpu_emulated() {
-  return false;
-}
