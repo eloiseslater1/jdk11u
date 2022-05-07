@@ -47,7 +47,7 @@ public class MultiScreenInsetsTest {
     private static final int SIZE = 100;
 
     public static void main(String[] args) throws InterruptedException {
-        if (!Platform.isLinux() && !Platform.isSolaris()) {
+        if (!Platform.isLinux() && !Platform.isSolaris() && !Platform.isBSD()) {
             System.out.println("This test is for Solaris and Linux only..." +
                                "skipping!");
             return;

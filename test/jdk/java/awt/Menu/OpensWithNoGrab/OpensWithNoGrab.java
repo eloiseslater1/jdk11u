@@ -46,7 +46,7 @@ public class OpensWithNoGrab
     final static int delay = 50;
     private static void init()
     {
-        if (!(Platform.isLinux() || Platform.isSolaris())) {
+        if (!(Platform.isLinux() || Platform.isSolaris() || Platform.isBSD())) {
             System.out.println("This test is for XAWT/Motif only");
             OpensWithNoGrab.pass();
         }
