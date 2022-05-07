@@ -221,8 +221,9 @@ static attach_state_t ptrace_attach(pid_t pid, char* err_buf, size_t err_buf_len
       }
     }
     char buf[200];
-    strerror_r(errno, buf, sizeof(buf));
-    snprintf(err_buf, err_buf_len, "ptrace(PTRACE_ATTACH, ..) failed for %d: %s", pid, buf);
+    int rc = strerror_r(errno, buf, sizeof(buf));
+    char* msg = (rc == 0) ? (char*)buf : "Unknown";
+    snprintf(err_buf, err_buf_len, "ptrace(PTRACE_ATTACH, ..) failed for %d: %s", pid, msg);
     print_error("%s\n", err_buf);
     return ATTACH_FAIL;
   } else {
