@@ -2253,13 +2253,13 @@ bool os::pd_commit_memory(char* addr, size_t size, bool exec) {
   if (res != (uintptr_t) MAP_FAILED) {
     return true;
   }
+#endif // __APPLE__
 
   // Warn about any commit errors we see in non-product builds just
   // in case mmap() doesn't work as described on the man page.
   NOT_PRODUCT(warn_fail_commit_memory(addr, size, exec, errno);)
 
   return false;
-#endif // __APPLE__
 }
 
 bool os::pd_commit_memory(char* addr, size_t size, size_t alignment_hint,
