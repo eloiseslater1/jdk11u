@@ -4996,7 +4996,7 @@ class StubGenerator: public StubCodeGenerator {
     return start;
   }
 
-#if defined(LINUX) || defined(_ALLBSD_SOURCE)
+#if defined(LINUX) || defined(_BSDONLY_SOURCE)
 
   // ARMv8.1 LSE versions of the atomic stubs used by Atomic::PlatformXX.
   //
@@ -5159,7 +5159,7 @@ class StubGenerator: public StubCodeGenerator {
 
     ICache::invalidate_range(first_entry, __ pc() - first_entry);
   }
-#endif // LINUX || _ALLBSD_SOURCE
+#endif // LINUX || _BSDONLY_SOURCE
 
   void generate_base64_encode_simdround(Register src, Register dst,
         FloatRegister codec, u8 size) {
@@ -6401,11 +6401,11 @@ class StubGenerator: public StubCodeGenerator {
     generate_safefetch("SafeFetchN", sizeof(intptr_t), &StubRoutines::_safefetchN_entry,
                                                        &StubRoutines::_safefetchN_fault_pc,
                                                        &StubRoutines::_safefetchN_continuation_pc);
-#if defined(LINUX) || defined(_ALLBSD_SOURCE)
+#if defined(LINUX) || defined(_BSDONLY_SOURCE)
 
     generate_atomic_entry_points();
 
-#endif // LINUX || _ALLBSD_SOURCE
+#endif // LINUX || _BSDONLY_SOURCE
 
   StubRoutines::aarch64::set_completed();
   }
@@ -6425,7 +6425,7 @@ void StubGenerator_generate(CodeBuffer* code, bool all) {
 }
 
 
-#if defined(LINUX) || defined(_ALLBSD_SOURCE)
+#if defined(LINUX) || defined(_BSDONLY_SOURCE)
 
 // Define pointers to atomic stubs and initialize them to point to the
 // code in atomic_aarch64.S.
@@ -6449,4 +6449,4 @@ DEFAULT_ATOMIC_OP(cmpxchg, 8, _relaxed)
 
 #undef DEFAULT_ATOMIC_OP
 
-#endif // LINUX || _ALLBSD_SOURCE
+#endif // LINUX || _BSDONLY_SOURCE
