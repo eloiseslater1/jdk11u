@@ -165,7 +165,7 @@ else
     OPENJDK_TARGET_OS := macosx
   else ifeq ($(UNAME_OS), SunOS)
     OPENJDK_TARGET_OS := solaris
-  else ifneq ($(findstring BSD,$(UNAME_OS),))
+  else ifneq ($(findstring BSD,$(UNAME_OS)),)
     OPENJDK_TARGET_OS := bsd
   else
     OPENJDK_TARGET_OS := $(UNAME_OS)
