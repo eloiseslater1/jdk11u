@@ -243,13 +243,16 @@ JVM_handle_bsd_signal(int sig,
   }
 #endif // !PRODUCT
 
-  const char *fmt =
-      "caught unhandled signal " INT32_FORMAT " at address " PTR_FORMAT;
-  char buf[128];
+  char buf[64];
 
-  sprintf(buf, fmt, sig, info->si_addr);
+  sprintf(buf, "caught unhandled signal %d", sig);
+
+  // Silence -Wformat-security warning for fatal()
+PRAGMA_DIAG_PUSH
+PRAGMA_FORMAT_NONLITERAL_IGNORED
   fatal(buf);
-  return false;
+PRAGMA_DIAG_POP
+  return true; // silence compiler warnings
 }
 
 void os::Bsd::init_thread_fpu_state(void) {
