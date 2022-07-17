@@ -443,13 +443,13 @@ bool LIRGenerator::strength_reduce_multiply(LIR_Opr left, jint c, LIR_Opr result
     __ shift_left(left, log2_intptr(c + 1), result);
     __ sub(result, left, result);
 #else
-    LIR_Address::Scale scale = (LIR_Address::Scale) log2_intptr(c + 1);
+    LIR_Address::Scale scale = (LIR_Address::Scale) log2_intptr((intptr_t)(c + 1));
     LIR_Address* addr = new LIR_Address(left, left, scale, 0, T_INT);
     __ sub(LIR_OprFact::address(addr), left, result); // rsb with shifted register
 #endif // AARCH64
     return true;
   } else if (is_power_of_2(c - 1)) {
-    LIR_Address::Scale scale = (LIR_Address::Scale) log2_intptr(c - 1);
+    LIR_Address::Scale scale = (LIR_Address::Scale) log2_intptr((intptr_t)(c - 1));
     LIR_Address* addr = new LIR_Address(left, left, scale, 0, T_INT);
     __ add(left, LIR_OprFact::address(addr), result); // add with shifted register
     return true;
