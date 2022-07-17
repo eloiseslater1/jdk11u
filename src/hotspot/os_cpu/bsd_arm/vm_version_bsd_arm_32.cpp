@@ -35,7 +35,7 @@ void VM_Version::get_os_cpu_info() {
 
   int mib[2];
   size_t len;
-  char machine[8]; // 8 chars max : "arm" + "v6|v7" + "|eb" + '\0'
+  char machine[11]; // 11 chars max : "earm" + "v6|v7" + "|hf" + "|eb" + '\0'
 
   // Support for multiple calls in the init phase
   if (done) return;
@@ -55,6 +55,9 @@ void VM_Version::get_os_cpu_info() {
   } else if (strncmp(machine, "armv", 4) == 0 &&
       machine[4] >= '5' && machine[4] <= '9') {
     _arm_arch = (int)(machine[4] - '0');
+  }  else if (strncmp(machine, "earmv", 5) == 0 &&
+      machine[5] >= '5' && machine[5] <= '9') {
+    _arm_arch = (int)(machine[5] - '0');
   }
 }
 
