@@ -535,6 +535,7 @@ void Bytecodes::initialize() {
   def(_nofast_aload_0      , "nofast_aload_0"      , "b"    , NULL    , T_ILLEGAL,  1, true , _aload_0        );
   def(_nofast_iload        , "nofast_iload"        , "bi"   , NULL    , T_ILLEGAL,  1, false, _iload          );
 
+  def(_testitem1           , "_testitem1"          , "b"    , NULL    , T_VOID   ,  0, false);
   def(_shouldnotreachhere  , "_shouldnotreachhere" , "b"    , NULL    , T_VOID   ,  0, false);
 
   // compare can_trap information for each bytecode with the

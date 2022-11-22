@@ -300,6 +300,13 @@ class Bytecodes: AllStatic {
     _nofast_aload_0       ,          //  <- _aload_0
     _nofast_iload         ,          //  <- _iload
 
+    // Offline testing
+	_testitem1			  ,        //   initial example for assembler testing
+
+    // End Offline testing
+
+
+
     _shouldnotreachhere   ,          // For debugging
 
 

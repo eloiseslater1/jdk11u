@@ -523,6 +523,12 @@ void TemplateTable::initialize() {
   def(Bytecodes::_nofast_aload_0      , ____|____|clvm|____, vtos, atos, nofast_aload_0      ,  _           );
   def(Bytecodes::_nofast_iload        , ubcp|____|clvm|____, vtos, itos, nofast_iload        ,  _           );
 
+  // start of attempts to add offline testing ... this is  a hack and will need refactoring
+
+  def(Bytecodes::_testitem1           , ____|____|____|____, vtos, vtos,testitem1            ,  _           );
+
+  // end of attempts to add offline testing ...
+
   def(Bytecodes::_shouldnotreachhere   , ____|____|____|____, vtos, vtos, shouldnotreachhere ,  _           );
   // platform specific bytecodes
   pd_initialize();

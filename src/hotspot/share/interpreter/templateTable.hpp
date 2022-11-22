@@ -318,6 +318,8 @@ class TemplateTable: AllStatic {
 
   static void _breakpoint();
 
+  static void testitem1(); // offline testing
+
   static void shouldnotreachhere();
 
   // jvmti support
